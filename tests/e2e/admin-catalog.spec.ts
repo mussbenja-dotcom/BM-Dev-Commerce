@@ -126,10 +126,31 @@ test("merchant creates, validates and pauses a coupon", async ({ page }) => {
   expect(saved).toMatchObject({ type: "PERCENT", value: 20, maxUses: 50, active: false });
 });
 
+test("merchant reviews customers and exports them", async ({ page }) => {
+  const [own, other] = storeIds;
+  await db.customer.create({ data: { storeId: own, email: "cliente.qa@example.invalid", firstName: "Carla", lastName: "Cliente", phone: "1155550101", ordersCount: 2, totalSpent: 45000 } });
+  const foreign = await db.customer.create({ data: { storeId: other, email: "ajeno.qa@example.invalid", firstName: "Ajeno", lastName: "QA", ordersCount: 1, totalSpent: 1000 } });
+  await login(page);
+  await page.getByRole("navigation", { name: "Panel" }).first().getByRole("link", { name: "Clientes" }).click();
+  await expect(page.getByText("1 clientes · $ 45.000 comprados en total.", { exact: false })).toBeVisible();
+  await expect(page.getByText("Ajeno QA")).toHaveCount(0);
+  const download = page.waitForEvent("download");
+  await page.getByRole("link", { name: "Exportar CSV" }).click();
+  const file = await (await download).path();
+  const csv = (await import("node:fs")).readFileSync(file, "utf8");
+  expect(csv).toContain("Carla;Cliente;cliente.qa@example.invalid;1155550101;2;45000");
+  expect(csv).not.toContain("Ajeno");
+  await page.getByRole("link", { name: /Carla Cliente/ }).click();
+  await expect(page.getByRole("heading", { name: "Carla Cliente" })).toBeVisible();
+  await expect(page.getByText("$ 22.500")).toBeVisible();
+  await expect(page.getByRole("link", { name: "WhatsApp" })).toHaveAttribute("href", /wa\.me\/5491155550101/);
+  expect((await page.goto(`/admin/clientes/${foreign.id}`))?.status()).toBe(404);
+});
+
 test("product screens fit a phone", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await login(page);
-  for (const path of ["/admin/productos", "/admin/productos/nuevo", "/admin/productos/categorias", "/admin/promociones"]) {
+  for (const path of ["/admin/productos", "/admin/productos/nuevo", "/admin/productos/categorias", "/admin/promociones", "/admin/clientes"]) {
     await page.goto(path);
     expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
   }

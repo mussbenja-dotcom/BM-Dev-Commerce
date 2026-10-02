@@ -2,7 +2,7 @@
 
 - **Fecha:** 2026-10-02
 - **Branch:** `claude/wizardly-cerf-94tq6p` (sesión de Claude Code en la web; `main` sigue en `2bcbafe`). Mergear a `main` cuando se revise.
-- **Hitos de esta sesión:** fix e2e de filtros (`44772f2`) → landing comercial con leads → `/admin/productos` (productos, variantes, stock, categorías) → `/admin/promociones` (cupones).
+- **Hitos de esta sesión:** fix e2e de filtros (`44772f2`) → landing comercial con leads → `/admin/productos` (productos, variantes, stock, categorías) → `/admin/promociones` (cupones) → `/admin/clientes`.
 - **Push bloqueado:** la app de GitHub de Claude no tiene permiso de escritura en el repo (403 en `git push` y en la API). Los commits quedaron en el contenedor; se entregó un `git bundle` como respaldo. Ver "Cómo traer los commits" abajo.
 - **URL para revisar:** http://localhost:3000/ (landing) · http://localhost:3000/login → "Entrar al panel de la tienda demo" (Alma) → `/admin`.
 
@@ -11,7 +11,7 @@ La tienda pública compra de punta a punta, el comercio gestiona pedidos desde `
 ## Próximo paso exacto
 
 1. **Revisar en tu máquina** (ver "Verificar en local" abajo): aplicar la migración `20261002020158_leads` en la base demo y QA (`npm run db:deploy` con cada `DATABASE_URL`), mirar la landing con las fotos reales de las demos y confirmar el número de `BMDEV_WHATSAPP`.
-2. **Continuar `/admin`:** clientes y configuración (productos y promociones ya están). Agregar cada sección al array `ITEMS` de `src/components/admin/nav.tsx` solo cuando exista. Mismo patrón que pedidos: servicio en `src/lib/services/admin/*` filtrando por `storeId` de la sesión, reglas puras con tests, Server Actions con Zod + audit, integración con dos tiendas.
+2. **Continuar `/admin`:** configuración (productos, promociones y clientes ya están). Agregar cada sección al array `ITEMS` de `src/components/admin/nav.tsx` solo cuando exista. Mismo patrón que pedidos: servicio en `src/lib/services/admin/*` filtrando por `storeId` de la sesión, reglas puras con tests, Server Actions con Zod + audit, integración con dos tiendas.
 3. **Leads en `/superadmin`:** listado con filtro por estado (`LeadStatus`), detalle y cambio de estado. El modelo ya existe.
 4. `/demo`, superadmin, SEO (sitemap/robots: incluir `/tienda-online`). Al cerrar cada hito: typecheck, lint, tests, build, e2e, actualizar este archivo, commit y push.
 
@@ -37,6 +37,12 @@ Para que futuras sesiones web puedan pushear: dar acceso de escritura a la app d
 - Causa: con el modal "Filtros" abierto, el formulario existía dos veces (sidebar oculto + modal) y los `<select>` estaban envueltos por su `<label>`, cuyo texto incluía todas las opciones ("OrdenarDestacadosMás nuevos…"). `getByLabel("Ordenar", { exact: true })` no encontraba nada.
 - `CatalogFilters` ahora renderiza el formulario en un solo lugar a la vez (el sidebar desmonta su copia mientras el modal está abierto) y Buscar/Ordenar/Categoría usan `htmlFor` + `id`.
 - `playwright.config.ts` acepta `PLAYWRIGHT_CHROMIUM_PATH` opcional para usar un Chromium preinstalado (entornos en la nube). Sin la variable no cambia nada.
+
+### Panel `/admin/clientes` (esta sesión)
+
+- Nav: "Clientes". Solo lectura: los clientes los crea el checkout. Listado con búsqueda (nombre, email, teléfono), orden (recientes, más compraron, más pedidos), totales de la tienda, paginación. Detalle con pedidos (link a cada uno), ticket promedio, direcciones, email y WhatsApp.
+- `GET /admin/clientes/exportar`: CSV con `;` y BOM (Excel en español), `Cache-Control: private, no-store`, audit `customers.export`. `src/lib/csv.ts` neutraliza celdas que empiezan con `= + - @` (inyección de fórmulas), con tests.
+- Todo filtra por `storeId`; un cliente de otra tienda → 404.
 
 ### Panel `/admin/promociones` (esta sesión)
 
@@ -128,6 +134,10 @@ Antes de publicar en otro entorno: `npm run db:deploy`.
 - `.env` local contiene `DATABASE_POOL_MAX=1` y `E2E_DATABASE_URL` de QA. No se commitean secretos.
 - `npm run db:seed` recrea solo tiendas `isDemo`; no ejecutarlo para probar cambios sobre datos que se quieran conservar.
 - Seed verificado en QA: Alma 23 productos / 149 variantes, Nativa 10 / 11, Mía 10 / 13, Nido 9 / 13, Detalle 8 / 8.
+
+## Verificaciones (hito clientes)
+
+- typecheck, lint OK. `npm test` 58 OK (+3 CSV). `npm run test:integration` 20 OK (+1 `admin-customers`: aislamiento, búsqueda, orden, export). `npm run test:e2e` 13 de 13 OK (+1: listado sin clientes ajenos, descarga del CSV y su contenido, detalle, link de WhatsApp, cliente ajeno → 404).
 
 ## Verificaciones (hito promociones)
 
