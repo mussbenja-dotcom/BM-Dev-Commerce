@@ -8,7 +8,6 @@
 ## Próximo paso exacto
 
 1. **En tu máquina:** `git pull` en `main` y `npm run db:deploy` (migraciones `20261002020158_leads` y `*_lead_notes_store`). Opcional `npm run db:seed` (solo recrea tiendas demo; actualiza CBU/CUIT ficticios válidos y crea el superadmin si está en `.env`).
-2. **`/demo`** (siguiente): selector de rubros con las 5 demos, "ver tienda" y "ver el panel" (login demo). La landing ya enlaza a `/s/<demo>`; falta la página dedicada.
 3. **SEO:** `sitemap.xml` y `robots.txt` (incluir `/tienda-online`; excluir `/admin`, `/superadmin`, `/login`, checkout/pedido), canonical y Open Graph por tienda, JSON-LD de producto.
 4. **Imágenes:** subida de archivos (Cloudinary o `/public/uploads`) para productos, logo y categorías; hoy son URLs.
 5. **Mercado Pago real:** carga de credenciales por tienda desde `/superadmin` (cifradas con `ENCRYPTION_KEY`) y prueba en SANDBOX con HTTPS antes de ofrecer cobros reales.
@@ -21,6 +20,12 @@
 - Las e2e/integración de esta sesión corrieron contra un PostgreSQL 16 local del contenedor (no PGlite), con `DATABASE_POOL_MAX=5`.
 
 ## Hitos implementados
+
+### `/demo` comercial (esta sesión)
+
+- `/demo?rubro=<slug>`: presentación con selector de las demos (datos reales: nombre, rubro, colores, productos), "Ver tienda" (`/s/<slug>`), "Ver panel del negocio" (`demoLoginAction` con el slug elegido; se oculta si `DEMO_LOGIN_ENABLED` no es `true`), cupones activos de esa tienda y el **recorrido de 19 pasos** para una reunión. Los pasos con link usan datos reales (primera categoría, producto destacado con stock, término de búsqueda) y la e2e verifica que todos respondan 200.
+- La landing ahora lleva "Ver demo" a `/demo`.
+- **e2e `demo-tour.spec.ts`:** recorre la reunión completa en Alma a 390 px: inicio, búsqueda con sugerencias, filtros, producto, variante, carrito, `BIENVENIDA10`, envío, checkout por WhatsApp (pedido registrado antes de abrir `wa.me`, mensaje con el número), panel demo, cambio de estado, stock descontado, pantallas de producto, promociones y métricas; al final cancela el pedido desde el panel (stock y cupón vuelven).
 
 ### Huecos P0.5 del panel `/admin` (esta sesión)
 
@@ -157,6 +162,11 @@ Antes de publicar en otro entorno: `npm run db:deploy`.
 - `.env` local contiene `DATABASE_POOL_MAX=1` y `E2E_DATABASE_URL` de QA. No se commitean secretos.
 - `npm run db:seed` recrea solo tiendas `isDemo`; no ejecutarlo para probar cambios sobre datos que se quieran conservar.
 - Seed verificado en QA: Alma 23 productos / 149 variantes, Nativa 10 / 11, Mía 10 / 13, Nido 9 / 13, Detalle 8 / 8.
+
+## Verificaciones (hito /demo)
+
+- `npx tsc --noEmit` OK · `npx eslint src` OK · `npm test` 73 OK · `npm run test:integration` 32 OK · `npm run build` OK · `npm run test:e2e` 20 de 20 OK en dos corridas seguidas.
+- Nota QA: una corrida intermedia de `demo-tour` falló antes de cancelar y dejó un pedido de prueba en la tienda Alma de la base **QA del contenedor** (no afecta tus bases).
 
 ## Verificaciones (hito huecos P0.5)
 

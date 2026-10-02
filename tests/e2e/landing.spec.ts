@@ -29,7 +29,7 @@ test("landing explains the offer at / and /tienda-online without prices or tech 
     await expect(page.getByText(section, { exact: true }).first()).toBeVisible();
   }
   // No catalog/cart of its own: demo links go to the storefronts.
-  await expect(page.getByRole("link", { name: "Ver demo" }).last()).toHaveAttribute("href", /^\/s\/[a-z]+$/);
+  await expect(page.getByRole("link", { name: "Ver demo", exact: true }).first()).toHaveAttribute("href", "/demo");
 
   const number = (process.env.BMDEV_WHATSAPP ?? "").replace(/\D/g, "");
   if (number.length >= 8) {
@@ -39,6 +39,27 @@ test("landing explains the offer at / and /tienda-online without prices or tech 
     expect(url.searchParams.get("text")).toContain("me interesa tener una tienda online para mi negocio");
   }
   expect(errors).toEqual([]);
+});
+
+test("demo page lets a prospect browse a store and open its panel", async ({ page }) => {
+  test.skip(!(await db.store.count({ where: { slug: "nativa", isDemo: true } })), "demo stores not seeded");
+  for (const width of [390, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/demo?rubro=nativa");
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Probá una tienda real");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  }
+  await expect(page.getByRole("link", { name: "Ver tienda" })).toHaveAttribute("href", "/s/nativa");
+  await expect(page.getByText("BIENVENIDA10").first()).toBeVisible();
+  // Every link in the tour is real.
+  const hrefs = await page.locator("#recorrido ~ div a, section[aria-labelledby=recorrido] a").evaluateAll((as) => as.map((a) => a.getAttribute("href")!));
+  expect(hrefs.length).toBeGreaterThanOrEqual(6);
+  for (const href of new Set(hrefs)) expect((await page.request.get(href)).status(), href).toBe(200);
+  if (process.env.DEMO_LOGIN_ENABLED === "true") {
+    await page.getByRole("button", { name: "Ver panel del negocio" }).click();
+    await expect(page).toHaveURL(/\/admin$/);
+    await expect(page.getByText("Nativa Skin").first()).toBeVisible();
+  }
 });
 
 test("lead form validates on the server, keeps input and stores the request", async ({ page }) => {

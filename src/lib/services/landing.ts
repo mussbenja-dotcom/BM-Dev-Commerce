@@ -53,3 +53,31 @@ export async function getLandingDemos(): Promise<LandingDemo[]> {
       products: s.products.map((p) => ({ name: p.name, price: p.price, compareAtPrice: p.compareAtPrice, image: p.images[0]?.url ?? null })),
     }));
 }
+
+/** Real data of one demo store, used to build working links for the meeting tour on /demo. */
+export async function getDemoTour(slug: string) {
+  const store = await db.store.findFirst({
+    where: { slug, isDemo: true, status: "ACTIVE" },
+    select: {
+      slug: true, name: true,
+      categories: { where: { active: true }, orderBy: { position: "asc" }, take: 1, select: { slug: true, name: true } },
+      coupons: { where: { active: true }, orderBy: { createdAt: "asc" }, select: { code: true, description: true } },
+      products: {
+        where: { active: true, variants: { some: { active: true, stock: { gt: 0 } } } },
+        orderBy: [{ featured: "desc" }, { soldCount: "desc" }],
+        take: 1,
+        select: { slug: true, name: true, option1Name: true, option2Name: true },
+      },
+    },
+  });
+  if (!store) return null;
+  const product = store.products[0] ?? null;
+  return {
+    slug: store.slug,
+    name: store.name,
+    category: store.categories[0] ?? null,
+    product,
+    searchTerm: product?.name.split(" ")[0] ?? "",
+    coupons: store.coupons,
+  };
+}
