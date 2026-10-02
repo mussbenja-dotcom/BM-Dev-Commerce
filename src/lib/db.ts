@@ -7,10 +7,13 @@ const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 function createClient() {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) throw new Error("DATABASE_URL is not set");
-  const adapter = new PrismaPg({ connectionString });
+  const poolMax = process.env.DATABASE_POOL_MAX ? Number(process.env.DATABASE_POOL_MAX) : 10;
+  if (!Number.isInteger(poolMax) || poolMax < 1) throw new Error("DATABASE_POOL_MAX must be a positive integer");
+  const adapter = new PrismaPg({ connectionString, max: poolMax });
   return new PrismaClient({ adapter });
 }
 
 export const db = globalForPrisma.prisma ?? createClient();
 
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = db;
+// Share the pool across server component / route handler bundles too.
+globalForPrisma.prisma = db;

@@ -450,6 +450,7 @@ model Order {
   storeId            String
   number             Int
   publicToken        String          @unique
+  checkoutKey        String?
   customerId         String?
   status             OrderStatus     @default(NEW)
   paymentStatus      PaymentStatus   @default(PENDING)
@@ -483,6 +484,7 @@ model Order {
   events             OrderEvent[]
 
   @@unique([storeId, number])
+  @@unique([storeId, checkoutKey])
   @@index([storeId, status])
   @@index([storeId, createdAt])
   @@index([customerId])

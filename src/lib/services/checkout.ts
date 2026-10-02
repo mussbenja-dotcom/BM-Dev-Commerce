@@ -143,9 +143,10 @@ export class CheckoutError extends Error {
  * Stock is decremented with a conditional update so two buyers can never
  * oversell the last unit.
  */
-export async function createOrder(storeId: string, input: CheckoutInput) {
+export async function createOrder(storeId: string, input: CheckoutInput, checkoutKey?: string) {
   const settings = await db.storeSettings.findUnique({ where: { storeId } });
-  if (!settings) throw new CheckoutError("Tienda no disponible.");
+  const activeStore = await db.store.findFirst({ where: { id: storeId, status: "ACTIVE" }, select: { id: true } });
+  if (!settings || !activeStore) throw new CheckoutError("Tienda no disponible.");
 
   const enabled: Record<PaymentMethod, boolean> = {
     MERCADOPAGO: settings.enableMercadoPago,
@@ -160,6 +161,7 @@ export async function createOrder(storeId: string, input: CheckoutInput) {
     if (!input.street || !input.city || !input.province || !input.postalCode) {
       throw new CheckoutError("Completá la dirección de envío.", "SHIPPING");
     }
+    if (!ARGENTINE_PROVINCES.includes(input.province)) throw new CheckoutError("Elegí una provincia válida.", "SHIPPING");
     if (!input.shippingMethodId) throw new CheckoutError("Elegí un método de envío.", "SHIPPING");
     const method = await db.shippingMethod.findFirst({
       where: { id: input.shippingMethodId, storeId, active: true, type: "SHIPPING" },
@@ -260,6 +262,7 @@ export async function createOrder(storeId: string, input: CheckoutInput) {
         storeId,
         number: store.orderSeq,
         publicToken: randomToken(18),
+        checkoutKey,
         customerId: customer.id,
         paymentMethod: input.paymentMethod,
         deliveryMethod: delivery,

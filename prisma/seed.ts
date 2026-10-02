@@ -7,7 +7,6 @@
  */
 import "dotenv/config";
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import bcrypt from "bcryptjs";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient, type OrderStatus, type PaymentMethod } from "../src/generated/prisma/client";
@@ -15,10 +14,10 @@ import { provisionStore } from "../src/lib/services/provision";
 import { slugify } from "../src/lib/slug";
 import { SEED_STORES, type SeedStore } from "./seed-data/stores";
 
-const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
+const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL!, max: Number(process.env.DATABASE_POOL_MAX ?? 10) }) });
 
 const images: Record<string, Record<string, string>> = JSON.parse(
-  readFileSync(join(__dirname, "seed-data", "images.json"), "utf8"),
+  readFileSync(new URL("./seed-data/images.json", import.meta.url), "utf8"),
 );
 
 function img(store: string, key: string, kind: "product" | "banner" = "product"): string {

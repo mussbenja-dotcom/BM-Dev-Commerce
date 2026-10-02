@@ -31,9 +31,13 @@ function createCartStore(key: string) {
     loaded = true;
     try {
       const raw = window.localStorage.getItem(key);
+      state = EMPTY;
       if (raw) {
         const parsed = JSON.parse(raw) as CartState;
-        if (Array.isArray(parsed.items)) state = { items: parsed.items.slice(0, 50), coupon: parsed.coupon ?? null };
+        if (Array.isArray(parsed.items)) state = {
+          items: parsed.items.filter((item) => item && typeof item.variantId === "string" && typeof item.productSlug === "string" && typeof item.name === "string" && typeof item.unitPrice === "number" && Number.isInteger(item.quantity) && item.quantity > 0 && item.quantity <= 20).slice(0, 50),
+          coupon: typeof parsed.coupon === "string" ? parsed.coupon : null,
+        };
       }
     } catch {
       state = EMPTY;
@@ -162,9 +166,9 @@ export type QuoteParams = {
 
 /** Debounced server quote for the current cart. */
 export function useQuote(slug: string, items: CartItem[], coupon: string | null, params: QuoteParams = {}) {
-  const [quote, setQuote] = useState<Quote | null>(null);
+  const [result, setResult] = useState<{ body: string; quote: Quote } | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<{ body: string; message: string } | null>(null);
   const reqId = useRef(0);
   const enabled = params.enabled ?? true;
   const body = JSON.stringify({
@@ -174,7 +178,7 @@ export function useQuote(slug: string, items: CartItem[], coupon: string | null,
     paymentMethod: params.paymentMethod ?? null,
   });
 
-  const run = useCallback(async () => {
+  const run = useCallback(async (signal?: AbortSignal) => {
     const id = ++reqId.current;
     setLoading(true);
     try {
@@ -182,15 +186,16 @@ export function useQuote(slug: string, items: CartItem[], coupon: string | null,
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body,
+        signal,
       });
       if (!res.ok) throw new Error("No pudimos actualizar los precios.");
       const data = (await res.json()) as Quote;
-      if (id === reqId.current) {
-        setQuote(data);
-        setError(null);
+      if (!signal?.aborted && id === reqId.current) {
+        setResult({ body, quote: data });
+        setFailure(null);
       }
     } catch (e) {
-      if (id === reqId.current) setError(e instanceof Error ? e.message : "Error de conexión.");
+      if (!signal?.aborted && id === reqId.current) setFailure({ body, message: e instanceof Error ? e.message : "Error de conexión." });
     } finally {
       if (id === reqId.current) setLoading(false);
     }
@@ -198,9 +203,12 @@ export function useQuote(slug: string, items: CartItem[], coupon: string | null,
 
   useEffect(() => {
     if (!enabled || items.length === 0) return;
-    const t = setTimeout(run, 180);
-    return () => clearTimeout(t);
+    const controller = new AbortController();
+    const t = setTimeout(() => run(controller.signal), 180);
+    return () => { clearTimeout(t); controller.abort(); };
   }, [run, enabled, items.length]);
 
-  return { quote: items.length ? quote : null, loading, error, refresh: run };
+  const currentQuote = result?.body === body ? result.quote : null;
+  const error = failure?.body === body ? failure.message : null;
+  return { quote: items.length ? currentQuote : null, loading: enabled && items.length > 0 && (loading || (!currentQuote && !error)), error, refresh: run };
 }
