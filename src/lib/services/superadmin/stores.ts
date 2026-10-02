@@ -1,0 +1,129 @@
+import "server-only";
+import { db } from "@/lib/db";
+import { Prisma, type StorePlan, type StoreStatus } from "@/generated/prisma/client";
+import { hashPassword } from "@/lib/auth/password";
+import { AdminError } from "@/lib/services/admin/common";
+import { provisionStore, type NewStoreInput } from "@/lib/services/provision";
+import { tempPassword } from "./rules";
+
+const isUnique = (err: unknown) => err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002";
+
+/** Creates a store and its owner with a temporary password that is returned once and only stored hashed. */
+export async function createStore(input: NewStoreInput, opts: { leadId?: string | null } = {}) {
+  const [slugTaken, emailTaken, domainTaken] = await Promise.all([
+    db.store.findUnique({ where: { slug: input.slug }, select: { id: true } }),
+    db.user.findUnique({ where: { email: input.ownerEmail }, select: { id: true } }),
+    input.domain ? db.storeDomain.findUnique({ where: { hostname: input.domain }, select: { id: true } }) : null,
+  ]);
+  const errors: Record<string, string> = {};
+  if (slugTaken) errors.slug = "Ya hay una tienda con esa dirección.";
+  if (emailTaken) errors.ownerEmail = "Ese email ya tiene un usuario.";
+  if (domainTaken) errors.domain = "Ese dominio ya está asignado a otra tienda.";
+  if (Object.keys(errors).length) throw new AdminError(Object.values(errors)[0], errors);
+
+  const password = tempPassword();
+  try {
+    const { store, owner } = await provisionStore(db, { ...input, passwordHash: await hashPassword(password), status: "DRAFT" });
+    if (opts.leadId) await db.lead.updateMany({ where: { id: opts.leadId }, data: { storeId: store.id, status: "WON" } });
+    return { storeId: store.id, slug: store.slug, name: store.name, ownerEmail: owner.email, tempPassword: password };
+  } catch (err) {
+    if (isUnique(err)) throw new AdminError("La dirección, el dominio o el email ya están en uso.");
+    throw err;
+  }
+}
+
+export async function updateStore(storeId: string, input: { name: string; status: StoreStatus; plan: StorePlan; notes: string | null }) {
+  const r = await db.store.updateMany({ where: { id: storeId }, data: input });
+  if (!r.count) throw new AdminError("No encontramos la tienda.");
+}
+
+export async function addDomain(storeId: string, hostname: string, primary: boolean) {
+  const store = await db.store.findUnique({ where: { id: storeId }, select: { id: true } });
+  if (!store) throw new AdminError("No encontramos la tienda.");
+  const taken = await db.storeDomain.findUnique({ where: { hostname }, select: { storeId: true } });
+  if (taken) throw new AdminError(taken.storeId === storeId ? "La tienda ya tiene ese dominio." : "Ese dominio ya está asignado a otra tienda.", { hostname: "Ya está en uso." });
+  try {
+    await db.$transaction(async (tx) => {
+      const count = await tx.storeDomain.count({ where: { storeId } });
+      const makePrimary = primary || count === 0;
+      if (makePrimary) await tx.storeDomain.updateMany({ where: { storeId }, data: { isPrimary: false } });
+      await tx.storeDomain.create({ data: { storeId, hostname, isPrimary: makePrimary } });
+    });
+  } catch (err) {
+    if (isUnique(err)) throw new AdminError("Ese dominio ya está asignado.", { hostname: "Ya está en uso." });
+    throw err;
+  }
+}
+
+export async function setPrimaryDomain(storeId: string, domainId: string) {
+  await db.$transaction(async (tx) => {
+    const domain = await tx.storeDomain.findFirst({ where: { id: domainId, storeId }, select: { id: true } });
+    if (!domain) throw new AdminError("No encontramos el dominio.");
+    await tx.storeDomain.updateMany({ where: { storeId }, data: { isPrimary: false } });
+    await tx.storeDomain.update({ where: { id: domain.id }, data: { isPrimary: true } });
+  });
+}
+
+/** A domain mapping is configuration (no history points to it), so it can be removed. */
+export async function removeDomain(storeId: string, domainId: string) {
+  return db.$transaction(async (tx) => {
+    const domain = await tx.storeDomain.findFirst({ where: { id: domainId, storeId } });
+    if (!domain) throw new AdminError("No encontramos el dominio.");
+    await tx.storeDomain.delete({ where: { id: domain.id } });
+    if (domain.isPrimary) {
+      const next = await tx.storeDomain.findFirst({ where: { storeId }, orderBy: { createdAt: "asc" } });
+      if (next) await tx.storeDomain.update({ where: { id: next.id }, data: { isPrimary: true } });
+    }
+    return domain.hostname;
+  });
+}
+
+export async function setDomainVerified(storeId: string, domainId: string, verified: boolean) {
+  const r = await db.storeDomain.updateMany({ where: { id: domainId, storeId }, data: { verified } });
+  if (!r.count) throw new AdminError("No encontramos el dominio.");
+}
+
+export async function addStoreUser(storeId: string, input: { name: string; email: string }) {
+  const store = await db.store.findUnique({ where: { id: storeId }, select: { id: true, isDemo: true } });
+  if (!store) throw new AdminError("No encontramos la tienda.");
+  if (await db.user.findUnique({ where: { email: input.email }, select: { id: true } })) throw new AdminError("Ese email ya tiene un usuario.", { email: "Ya está en uso." });
+  const password = tempPassword();
+  try {
+    const user = await db.user.create({
+      data: { ...input, storeId, role: "STORE_ADMIN", isDemo: store.isDemo, passwordHash: await hashPassword(password) },
+      select: { id: true, email: true },
+    });
+    return { ...user, tempPassword: password };
+  } catch (err) {
+    if (isUnique(err)) throw new AdminError("Ese email ya tiene un usuario.", { email: "Ya está en uso." });
+    throw err;
+  }
+}
+
+/** Only store users: a superadmin account is never managed from a store page. */
+async function storeUser(storeId: string, userId: string) {
+  const user = await db.user.findFirst({ where: { id: userId, storeId, role: { not: "SUPERADMIN_BMDEV" } }, select: { id: true, email: true } });
+  if (!user) throw new AdminError("No encontramos el usuario.");
+  return user;
+}
+
+/** New temporary password; every open session of that user is closed. */
+export async function resetUserPassword(storeId: string, userId: string) {
+  const user = await storeUser(storeId, userId);
+  const password = tempPassword();
+  await db.$transaction([
+    db.user.update({ where: { id: user.id }, data: { passwordHash: await hashPassword(password) } }),
+    db.session.deleteMany({ where: { userId: user.id } }),
+  ]);
+  return { email: user.email, tempPassword: password };
+}
+
+/** Users are deactivated, never deleted (audit logs point to them). */
+export async function setUserActive(storeId: string, userId: string, active: boolean) {
+  const user = await storeUser(storeId, userId);
+  await db.$transaction([
+    db.user.update({ where: { id: user.id }, data: { active } }),
+    ...(active ? [] : [db.session.deleteMany({ where: { userId: user.id } })]),
+  ]);
+  return user.email;
+}

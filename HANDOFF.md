@@ -1,28 +1,18 @@
 # Estado actual — BM Dev Commerce Engine
 
 - **Fecha:** 2026-10-02
-- **Branch:** `claude/wizardly-cerf-94tq6p` (sesión de Claude Code en la web; `main` sigue en `2bcbafe`). Mergear a `main` cuando se revise.
-- **Hitos de esta sesión:** fix e2e de filtros (`44772f2`) → landing comercial con leads → `/admin/productos` (productos, variantes, stock, categorías) → `/admin/promociones` (cupones) → `/admin/clientes` → `/admin/configuracion`. **El panel `/admin` quedó completo.**
-- **Push bloqueado:** la app de GitHub de Claude no tiene permiso de escritura en el repo (403 en `git push` y en la API). Los commits quedaron en el contenedor; se entregó un `git bundle` como respaldo. Ver "Cómo traer los commits" abajo.
-- **URL para revisar:** http://localhost:3000/ (landing) · http://localhost:3000/login → "Entrar al panel de la tienda demo" (Alma) → `/admin`.
-
-La tienda pública compra de punta a punta, el comercio gestiona pedidos desde `/admin` y la landing comercial capta pedidos de tienda (leads). **Faltan:** resto del panel (productos, stock, promociones, clientes, configuración), listado de leads en `/superadmin`, `/demo`, superadmin y cobros reales con Mercado Pago.
+- **Branch de trabajo:** `claude/wizardly-cerf-94tq6p` (sesión de Claude Code en la web). `main` ya tiene todo lo anterior (PR #1 mergeado: landing + panel `/admin` completo).
+- **Hitos de esta sesión:** fix e2e de filtros → landing comercial con leads → `/admin` productos, promociones, clientes y configuración → **`/superadmin`** (solicitudes, tiendas, dominios, usuarios, modo soporte).
+- **URLs para revisar:** `/` (landing) · `/login` → "Entrar al panel de la tienda demo" → `/admin` · `/login` con `SUPERADMIN_EMAIL`/`SUPERADMIN_PASSWORD` del `.env` → `/superadmin`.
 
 ## Próximo paso exacto
 
-1. **Revisar en tu máquina** (ver "Verificar en local" abajo): aplicar la migración `20261002020158_leads` en la base demo y QA (`npm run db:deploy` con cada `DATABASE_URL`), mirar la landing con las fotos reales de las demos y confirmar el número de `BMDEV_WHATSAPP`.
-2. **Panel `/admin`: completo** (inicio, pedidos, productos, promociones, clientes, configuración). Pendiente dentro del panel: subida de imágenes (hoy son URLs) y credenciales de Mercado Pago (las configura BM Dev; falta validar cobros reales en SANDBOX).
-3. **Leads en `/superadmin`:** listado con filtro por estado (`LeadStatus`), detalle y cambio de estado. El modelo ya existe.
-4. `/demo`, superadmin, SEO (sitemap/robots: incluir `/tienda-online`). Al cerrar cada hito: typecheck, lint, tests, build, e2e, actualizar este archivo, commit y push.
-
-## Cómo traer los commits (si el push no llegó a GitHub)
-
-```bash
-git fetch /ruta/al/archivo.bundle claude/wizardly-cerf-94tq6p:claude/wizardly-cerf-94tq6p
-git checkout claude/wizardly-cerf-94tq6p && npm install && npm run db:deploy
-```
-
-Para que futuras sesiones web puedan pushear: dar acceso de escritura a la app de GitHub de Claude sobre `mussbenja-dotcom/BM-Dev-Commerce` (https://github.com/apps/claude/installations/select_target) o reconectar GitHub en claude.ai.
+1. **En tu máquina:** `git pull` en `main` y `npm run db:deploy` (migraciones `20261002020158_leads` y `*_lead_notes_store`). Opcional `npm run db:seed` (solo recrea tiendas demo; actualiza CBU/CUIT ficticios válidos y crea el superadmin si está en `.env`).
+2. **`/demo`:** selector de rubros con las 5 demos, "ver tienda" y "ver el panel" (login demo). La landing ya enlaza a `/s/<demo>`; falta la página dedicada.
+3. **SEO:** `sitemap.xml` y `robots.txt` (incluir `/tienda-online`; excluir `/admin`, `/superadmin`, `/login`, checkout/pedido), canonical y Open Graph por tienda, JSON-LD de producto.
+4. **Imágenes:** subida de archivos (Cloudinary o `/public/uploads`) para productos, logo y categorías; hoy son URLs.
+5. **Mercado Pago real:** carga de credenciales por tienda desde `/superadmin` (cifradas con `ENCRYPTION_KEY`) y prueba en SANDBOX con HTTPS antes de ofrecer cobros reales.
+6. Personalización visual desde el panel (colores, plantilla, secciones del inicio). Al cerrar cada hito: typecheck, lint, tests, build, e2e, actualizar este archivo, commit y push.
 
 ## Verificar en local (lo que la sesión web no pudo ver)
 
@@ -31,6 +21,18 @@ Para que futuras sesiones web puedan pushear: dar acceso de escritura a la app d
 - Las e2e/integración de esta sesión corrieron contra un PostgreSQL 16 local del contenedor (no PGlite), con `DATABASE_POOL_MAX=5`.
 
 ## Hitos implementados
+
+### Panel interno `/superadmin` (esta sesión)
+
+- Solo `SUPERADMIN_BMDEV` (`requireSuperadmin` en cada página y acción; un comercio que entra a `/superadmin` vuelve a `/admin`). Nav: Inicio, Solicitudes (contador de nuevas), Tiendas.
+- **Inicio:** solicitudes nuevas, tiendas activas y en borrador, ventas de 30 días, últimas solicitudes.
+- **Solicitudes** (`/superadmin/solicitudes`): pestañas por estado (Nueva, Contactada, Presupuesto enviado, Ganada, Perdida, Spam; "Todas" oculta spam), búsqueda, detalle con lo que contó el comercio, WhatsApp/email, estado y notas internas, y "Crear tienda desde esta solicitud".
+- **Tiendas:** listado con búsqueda y estado; **alta** (`provisionStore`) en borrador con plantilla, categorías, envíos y cupón de ejemplo; el dueño recibe una **contraseña temporal** que se muestra una sola vez (solo se guarda el hash). Si viene de una solicitud, la solicitud queda Ganada y enlazada a la tienda (`Lead.storeId`).
+- **Detalle de tienda:** nombre, estado (borrador / activa / suspendida), plan y notas; dominios (agregar —acepta `https://www.x.com/` y lo normaliza—, principal, verificado, quitar); usuarios (agregar administrador con contraseña temporal, nueva contraseña —cierra sus sesiones—, desactivar/reactivar; nunca se borran); actividad reciente; métricas.
+- **Modo soporte:** "Entrar en modo soporte" abre el `/admin` de esa tienda con aviso y botón "Salir del modo soporte" (vuelve al detalle). Audit `support.enter/exit`.
+- Migración `*_lead_notes_store`: `Lead.notes` y `Lead.storeId` (FK con `SET NULL`), solo agrega columnas.
+- Archivos: `src/app/superadmin/*`, `src/components/superadmin/{nav,forms}.tsx`, `src/lib/services/superadmin/{rules,leads,stores}.ts` (+ `rules.test.ts`).
+- Pendiente aquí: credenciales de Mercado Pago por tienda, reset de demos, impersonar con auditoría más detallada.
 
 ### Fix e2e filtros (`44772f2`)
 
@@ -143,7 +145,11 @@ Antes de publicar en otro entorno: `npm run db:deploy`.
 - `npm run db:seed` recrea solo tiendas `isDemo`; no ejecutarlo para probar cambios sobre datos que se quieran conservar.
 - Seed verificado en QA: Alma 23 productos / 149 variantes, Nativa 10 / 11, Mía 10 / 13, Nido 9 / 13, Detalle 8 / 8.
 
-## Verificaciones (hito configuración — último de la sesión)
+## Verificaciones (hito superadmin)
+
+- typecheck, lint OK. `npm test` 69 OK (+3 contraseña temporal y slug). `npm run test:integration` 26 OK (+3 `superadmin`: alta desde solicitud con hash bcrypt y solicitud ganada, slug/email repetidos, dominios sin cruzar tiendas y principal al quitar, usuarios: alta, reset que cierra sesiones, desactivar sin borrar, sin tocar usuarios de otra tienda). Build OK. `npm run test:e2e` 17 de 17 OK en dos corridas (+2: solicitud → presupuesto → crear tienda → borrador 404 → activa 200 → dominio → modo soporte y salida → la dueña ingresa con la contraseña temporal y no puede abrir `/superadmin`; pantallas a 390 px).
+
+## Verificaciones (hito configuración)
 
 - typecheck, lint OK. `npm test` 66 OK (+8 `settings-rules`). `npm run test:integration` 23 OK (+3 `admin-settings`: token nunca expuesto, medio de pago usable, CBU inválido, aislamiento de datos y formas de entrega, retiro sin provincias, el checkout solo ve formas disponibles). `npm run test:e2e` 15 de 15 OK en dos corridas seguidas (+2: configurar anuncio/pagos/envío y verlo en la tienda; un visitante de la demo guarda Pagos sin tocar nada).
 

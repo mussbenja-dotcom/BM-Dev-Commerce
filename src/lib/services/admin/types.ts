@@ -10,6 +10,8 @@ export type ActionState =
       fieldErrors?: Record<string, string>;
       /** Optional payload, e.g. the id of a newly created record. */
       id?: string;
+      /** Temporary credentials shown once (superadmin). Never persisted in clear text. */
+      credentials?: { email: string; password: string };
     }
   | undefined;
 
