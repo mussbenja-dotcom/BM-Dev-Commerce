@@ -1,26 +1,44 @@
 # Estado actual — BM Dev Commerce Engine
 
-- **Fecha:** 2026-10-01
-- **Branch:** `main`
-- **Hitos:** `72976c0` Mercado Pago → `b43a07f` storefront y checkout → panel `/admin` de pedidos (este handoff; commit `b22a6e8`; ambos pusheados a `origin/main`).
-- **Sesión que escribió este archivo:** Claude Code, continuando el trabajo de ChatGPT. Se cortó por límite de tokens.
-- **URL para revisar:** http://localhost:3000/login → "Entrar al panel de la tienda demo" (Alma) → `/admin`.
+- **Fecha:** 2026-10-02
+- **Branch:** `claude/wizardly-cerf-94tq6p` (sesión de Claude Code en la web; `main` sigue en `2bcbafe`). Mergear a `main` cuando se revise.
+- **Hitos de esta sesión:** fix e2e de filtros (`44772f2`) → landing comercial `/tienda-online` + `/` con leads (este commit).
+- **URL para revisar:** http://localhost:3000/ (landing) · http://localhost:3000/login → "Entrar al panel de la tienda demo" (Alma) → `/admin`.
 
-La tienda pública compra de punta a punta y el comercio ya gestiona pedidos desde `/admin`. **Faltan:** resto del panel (productos, stock, promociones, clientes, configuración), `/demo`, superadmin, **landing comercial** y cobros reales con Mercado Pago.
+La tienda pública compra de punta a punta, el comercio gestiona pedidos desde `/admin` y la landing comercial capta pedidos de tienda (leads). **Faltan:** resto del panel (productos, stock, promociones, clientes, configuración), listado de leads en `/superadmin`, `/demo`, superadmin y cobros reales con Mercado Pago.
 
 ## Próximo paso exacto
 
-1. **Arreglar la prueba e2e que falla** `tests/e2e/storefront.spec.ts:76` ("home, search, category, filters…"): `getByLabel("Ordenar", { exact: true })` hace timeout dentro del modal "Filtros" a 390 px. No se tocó código de la tienda en esta sesión; pasaba en el hito anterior. Revisar `src/components/store/catalog-filters.tsx` / `catalog-page.tsx` (el `<select name="orden">` está dentro de un `<label>`; los `children` se renderizan dos veces: sidebar oculto + modal). Ver `test-results/storefront-home-search-*/error-context.md` y el trace. Las otras 5 pruebas e2e pasan.
-2. **Landing comercial BM Dev E-commerce** según `docs/LANDING_BRIEF.md` (brief completo del usuario). Plan propuesto:
-   - Ruta `/tienda-online` y que `/` (hoy create-next-app en `src/app/page.tsx`) muestre/redirija a la landing. `/login` ya enlaza a `/tienda-online`.
-   - Modelo nuevo `Lead` (migración: nombre, negocio, whatsapp, email, instagram, rubro, vendeOnline, cantidadProductos, necesidad, tieneDominio?, usaMercadoPago?, comentario, origen, ip, createdAt, status). Server Action con Zod, rate limit (`src/lib/rate-limit.ts`), honeypot, audit. Sin precios.
-   - Helper único para WhatsApp de BM Dev leyendo `BMDEV_WHATSAPP` (ya existe en `.env`; revisar `src/lib/whatsapp.ts`). Mensaje prearmado del brief.
-   - Sección demo con previews desktop / celular / panel (capturas reales de `/s/alma` y `/admin`) y links a las 5 demos. Revisar https://bmdev.solutions para identidad visual antes de diseñar.
-   - Luego listar leads en `/superadmin`.
-3. Continuar `/admin`: productos/variantes/stock e historial, promociones (cupones), clientes, configuración. Agregar cada sección al array `ITEMS` de `src/components/admin/nav.tsx` solo cuando exista.
-4. `/demo`, superadmin, SEO. Al cerrar cada hito: typecheck, lint, tests, build, e2e, actualizar este archivo, commit y push.
+1. **Revisar en tu máquina** (ver "Verificar en local" abajo): aplicar la migración `20261002020158_leads` en la base demo y QA (`npm run db:deploy` con cada `DATABASE_URL`), mirar la landing con las fotos reales de las demos y confirmar el número de `BMDEV_WHATSAPP`.
+2. **Continuar `/admin`:** productos/variantes/stock e historial (`StockMovement`), promociones (cupones), clientes, configuración. Agregar cada sección al array `ITEMS` de `src/components/admin/nav.tsx` solo cuando exista. Mismo patrón que pedidos: servicio en `src/lib/services/admin/*` filtrando por `storeId` de la sesión, reglas puras con tests, Server Actions con Zod + audit, integración con dos tiendas.
+3. **Leads en `/superadmin`:** listado con filtro por estado (`LeadStatus`), detalle y cambio de estado. El modelo ya existe.
+4. `/demo`, superadmin, SEO (sitemap/robots: incluir `/tienda-online`). Al cerrar cada hito: typecheck, lint, tests, build, e2e, actualizar este archivo, commit y push.
+
+## Verificar en local (lo que la sesión web no pudo ver)
+
+- **Identidad visual:** `bmdev.solutions` está bloqueado por la red del contenedor web, así que no se pudo revisar. La landing usa la identidad que ya tenía la plataforma (marca "BM", Manrope, tinta `#111318`, naranja `#e8551f`; CTA `#c43e0c` para contraste AA con texto blanco). Los colores están en un solo objeto `BRAND` en `src/components/landing/landing-page.tsx`: ajustarlos ahí si la web de BM Dev usa otros.
+- **Fotos de las demos:** Unsplash también está bloqueado en el contenedor, así que en las capturas de la sesión las previews se ven con placeholders. En tu máquina deberían verse las fotos reales de cada demo.
+- Las e2e/integración de esta sesión corrieron contra un PostgreSQL 16 local del contenedor (no PGlite), con `DATABASE_POOL_MAX=5`.
 
 ## Hitos implementados
+
+### Fix e2e filtros (`44772f2`)
+
+- Causa: con el modal "Filtros" abierto, el formulario existía dos veces (sidebar oculto + modal) y los `<select>` estaban envueltos por su `<label>`, cuyo texto incluía todas las opciones ("OrdenarDestacadosMás nuevos…"). `getByLabel("Ordenar", { exact: true })` no encontraba nada.
+- `CatalogFilters` ahora renderiza el formulario en un solo lugar a la vez (el sidebar desmonta su copia mientras el modal está abierto) y Buscar/Ordenar/Categoría usan `htmlFor` + `id`.
+- `playwright.config.ts` acepta `PLAYWRIGHT_CHROMIUM_PATH` opcional para usar un Chromium preinstalado (entornos en la nube). Sin la variable no cambia nada.
+
+### Landing comercial BM Dev E-commerce (esta sesión)
+
+- `/tienda-online` y `/` muestran la misma landing (`src/app/tienda-online/landing.tsx`); canonical y Open Graph apuntan a `/tienda-online`. `/` ya no es create-next-app. Ambas son dinámicas (`connection()`), así el build no necesita base.
+- Secciones del brief en orden: hero, ejemplos por rubro (las 5 demos con sus colores, tagline y productos reales), qué incluye (15 ítems), personalización, cómo funciona (4 pasos), demo (previews computadora / celular / panel + links a `/s/<demo>` y "Ver el panel del comercio" con `demoLoginAction` si `DEMO_LOGIN_ENABLED`), diferenciales (incluye "sin comisión de BM Dev por venta" y que los costos de procesamiento son del medio de pago), formulario y CTA final. Barra fija mobile con "Solicitar presupuesto" + WhatsApp.
+- Sin precios del servicio, sin catálogo/carrito propios, sin mencionar tecnología (lo verifica la e2e). Las previews son dibujos en HTML/CSS con datos reales de las demos (`src/components/landing/previews.tsx`), no capturas: no se rompen si cambia una demo. Si la base falla, la landing igual se muestra sin la sección de demos.
+- **WhatsApp:** `src/lib/bmdev.ts` → `bmdevWhatsappUrl()` es el único lugar que lee `BMDEV_WHATSAPP`; devuelve `null` si falta y los botones se ocultan. Mensaje del brief en `bmdevInterestMessage()` (`src/lib/services/leads/form.ts`); después de enviar el formulario se ofrece WhatsApp con negocio, rubro e Instagram ya completos.
+- **Leads:** modelo `Lead` + enum `LeadStatus` (NEW, CONTACTED, QUALIFIED, WON, LOST, SPAM), migración `20261002020158_leads` (solo agrega tabla y enum). Es de plataforma: no tiene `storeId`.
+  - `src/lib/services/leads/form.ts` (sin `server-only`): opciones, esquema Zod, normalización (WhatsApp solo dígitos, Instagram sin @/URL, email en minúsculas), mensajes en español.
+  - `src/lib/services/leads/submit.ts`: honeypot `sitio_web` (responde éxito y no guarda), validación, rate limit en memoria (5/hora por IP y 3/día por email+WhatsApp), guarda IP.
+  - `src/app/tienda-online/actions.ts`: Server Action, audit `lead.created`, errores por campo.
+  - `src/components/landing/lead-form.tsx`: envía con `startTransition` para no perder lo escrito cuando hay errores; sin JS sigue funcionando el POST nativo.
 
 ### Servicio de pagos (`72976c0`)
 
@@ -73,6 +91,7 @@ Migraciones aplicadas tanto a la base demo como a QA:
 
 1. `20261002000400_init`
 2. `20261002020000_checkout_idempotency`: agrega `Order.checkoutKey` nullable y unique compuesto `(storeId, checkoutKey)`.
+3. `20261002020158_leads`: enum `LeadStatus` y tabla `Lead`. **Pendiente de aplicar en tus bases locales** (solo se aplicó en las bases descartables del contenedor web).
 
 Antes de publicar en otro entorno: `npm run db:deploy`.
 
@@ -82,6 +101,15 @@ Antes de publicar en otro entorno: `npm run db:deploy`.
 - `npm run db:seed` recrea solo tiendas `isDemo`; no ejecutarlo para probar cambios sobre datos que se quieran conservar.
 - Seed verificado en QA: Alma 23 productos / 149 variantes, Nativa 10 / 11, Mía 10 / 13, Nido 9 / 13, Detalle 8 / 8.
 
+## Verificaciones (sesión landing, contenedor web con PostgreSQL 16 local)
+
+- `npm run typecheck` OK · `npm run lint` OK.
+- `npm test`: 41 OK (30 previas + 9 del formulario/mensaje + 2 del helper de WhatsApp).
+- `npm run test:integration`: 12 OK (8 previas + 4 de leads: guarda normalizado, honeypot/invalid no guardan, rate limit por IP y por contacto).
+- `npm run build` OK (`/` y `/tienda-online` dinámicas).
+- `npm run test:e2e`: 9 de 9 OK. Nuevo `tests/e2e/landing.spec.ts`: `/` y `/tienda-online` a 390 y 1440 px sin scroll horizontal, canonical, sin palabras técnicas, link de WhatsApp con el número de `BMDEV_WHATSAPP` y el mensaje; formulario con errores del servidor que conservan lo escrito, lead guardado; honeypot no guarda.
+- Capturas revisadas a 1440 y 390 px (en el contenedor; ver nota de fotos arriba).
+
 ## Verificaciones (sesión del panel)
 
 - `npm run typecheck` OK (tras `npm run build`; antes fallaba solo por tipos de rutas viejos en `.next/types`).
@@ -89,7 +117,7 @@ Antes de publicar en otro entorno: `npm run db:deploy`.
 - `npm test`: 30 OK (24 previas + 6 de reglas de pedidos).
 - `npm run test:integration`: 8 OK. Nuevo `tests/integration/admin-orders.test.ts`: aislamiento entre dos tiendas (lectura, listado, estado, cancelación, pago y notas de otra tienda → "No encontramos el pedido."), estados hacia adelante, doble cancelación simultánea repone stock una vez, cupón y cliente revertidos, pedido pagado exige confirmación, MP no editable a mano. Nota: con `DATABASE_POOL_MAX=1` la concurrencia queda serializada por el pool; en PostgreSQL real la protege el `FOR UPDATE`.
 - `npm run build` OK.
-- `npm run test:e2e`: 5 de 6 OK. Nuevo `tests/e2e/admin-orders.spec.ts` (login real, dashboard, listado, búsqueda vacía, marcar pagado, cambiar estado, nota, cancelar con confirmación de reintegro, stock repuesto, reintegrado, pedido ajeno → 404, mobile 390 px sin scroll horizontal). **Falla** la de filtros de la tienda (ver Próximo paso 1).
+- `npm run test:e2e`: 5 de 6 OK. Nuevo `tests/e2e/admin-orders.spec.ts` (login real, dashboard, listado, búsqueda vacía, marcar pagado, cambiar estado, nota, cancelar con confirmación de reintegro, stock repuesto, reintegrado, pedido ajeno → 404, mobile 390 px sin scroll horizontal). Fallaba la de filtros de la tienda; arreglada en `44772f2`.
 - Capturas revisadas: `test-results/manual/admin-dashboard-1280.png`, `admin-orders-390.png`, `admin-order-detail-390.png`.
 - **Windows/OneDrive:** `next build` falló con `EPERM unlink .next\serverppdmin` porque OneDrive convirtió carpetas de `.next` en marcadores sincronizados (ReparsePoint/ReadOnly). Se resolvió borrando esa carpeta con `Remove-Item -Recurse -Force`. Recomendado: mover el proyecto fuera de OneDrive o excluir `.next` de la sincronización.
 
@@ -120,8 +148,8 @@ Antes de publicar en otro entorno: `npm run db:deploy`.
 
 ### P0
 
-- Arreglar e2e de filtros de la tienda (ver Próximo paso 1).
-- Landing comercial según `docs/LANDING_BRIEF.md` + modelo `Lead` + reemplazo de `/`.
+- ~~Arreglar e2e de filtros~~ y ~~landing comercial + `Lead` + reemplazo de `/`~~: hechos en esta sesión.
+- Listado/gestión de leads en `/superadmin`.
 - Panel `/admin` restante: productos/variantes, stock e historial, promociones, clientes, configuración. (Dashboard y pedidos: hechos.)
 - `/demo`: selector de rubros, ver tienda y login demo al panel. No enviar usuarios a pantallas todavía inexistentes.
 - Validación Mercado Pago SANDBOX con credenciales y HTTPS antes de ofrecer cobros reales.
@@ -129,7 +157,6 @@ Antes de publicar en otro entorno: `npm run db:deploy`.
 ### P1
 
 - `/superadmin`: tiendas, alta (`provisionStore`), estado, dominios, plan, usuarios y soporte.
-- Landing `/tienda-online` y reemplazo/redirección de `/`, que sigue siendo create-next-app.
 - SEO completo: canonical, OG, JSON-LD, robots y sitemap por tienda. Solo metadata básica de home y noindex de compra implementados.
 - Tests unitarios dedicados para precios/WhatsApp; hoy están cubiertos parcialmente por recorridos y checkout con DB.
 
@@ -147,7 +174,7 @@ Antes de publicar en otro entorno: `npm run db:deploy`.
 - `prisma/schema.prisma`, `prisma/migrations`, `prisma/seed.ts`
 - `tests/integration/*`, `tests/e2e/storefront.spec.ts`, `playwright.config.ts`
 - Admin: `src/app/admin/*`, `src/lib/services/admin/{common,types,orders,order-rules}.ts`, `src/components/admin/{labels,nav,order-badges,order-actions}.tsx`
-- Brief de la landing: `docs/LANDING_BRIEF.md`
+- Landing: `docs/LANDING_BRIEF.md` (brief), `src/app/tienda-online/*`, `src/components/landing/*`, `src/lib/bmdev.ts`, `src/lib/services/{landing,leads/*}.ts`
 - Helpers superadmin: `src/lib/services/superadmin/{constants,queries}.ts`
 
 Referencias consultadas: [Mercado Pago Preferences API](https://www.mercadopago.com.ar/developers/es/reference/online-payments/checkout-pro-preferences/create-preference/post), [Prisma conexiones](https://www.prisma.io/docs/orm/prisma-client/setup-and-configuration/databases-connections).
