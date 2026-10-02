@@ -226,10 +226,10 @@ test("merchant duplicates, adjusts stock, publishes a banner and restyles the st
   await page.goto("/admin/promociones#banners");
   const banner = page.getByRole("form", { name: "Nuevo banner" });
   await banner.getByLabel("Título").fill("Liquidación QA");
-  await banner.getByLabel("Imagen (URL)").fill("https://example.com/foto.jpg");
+  await banner.getByLabel("Imagen", { exact: true }).fill("https://example.com/foto.jpg");
   await banner.getByRole("button", { name: "Crear banner" }).click();
   await expect(banner.getByText(/Cloudinary o Unsplash/).first()).toBeVisible();
-  await banner.getByLabel("Imagen (URL)").fill("https://images.unsplash.com/photo-1434389677669-e08b4cac3105");
+  await banner.getByLabel("Imagen", { exact: true }).fill("https://images.unsplash.com/photo-1434389677669-e08b4cac3105");
   await banner.getByRole("button", { name: "Crear banner" }).click();
   await expect(banner.getByRole("status")).toHaveText("Banner creado.");
 
@@ -248,6 +248,41 @@ test("merchant duplicates, adjusts stock, publishes a banner and restyles the st
   await expect(page.getByRole("heading", { name: "Liquidación QA" })).toBeVisible();
   await page.goto(`/s/${slug}/politicas/terminos`);
   await expect(page.getByRole("heading", { name: "Términos y condiciones" })).toBeVisible();
+});
+
+test("merchant uploads a product photo that the store serves; demo sessions cannot upload", async ({ page }) => {
+  const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=", "base64");
+  const [own] = storeIds;
+  const product = await db.product.create({ data: { storeId: own, slug: "foto-qa", name: "Foto QA", description: "x", sku: "FOTO-QA", price: 1000, variants: { create: { storeId: own, sku: "FOTO-QA", stock: 1 } } } });
+  await login(page);
+  await page.goto(`/admin/productos/${product.id}`);
+  const form = page.getByRole("form", { name: "Editar producto" });
+  await form.locator('input[type="file"]').setInputFiles({ name: "foto.svg", mimeType: "image/svg+xml", buffer: Buffer.from("<svg onload=alert(1)></svg>") });
+  await expect(form.getByText("Solo se pueden subir fotos JPG, PNG o WebP.")).toBeVisible();
+  await form.locator('input[type="file"]').setInputFiles({ name: "foto.png", mimeType: "image/png", buffer: png });
+  await expect(form.getByText("Foto cargada. Guardá para publicarla.")).toBeVisible();
+  const url = (await form.getByLabel("Fotos (una por línea)").inputValue()).trim();
+  expect(url).toMatch(new RegExp(`^/uploads/${own}/[A-Za-z0-9_-]+\\.png$`));
+  await form.getByRole("button", { name: "Guardar cambios" }).click();
+  await expect(form.getByText("Producto guardado.")).toBeVisible();
+  const served = await page.request.get(url);
+  expect(served.status()).toBe(200);
+  expect(served.headers()["content-type"]).toBe("image/png");
+  expect((await db.productImage.findFirstOrThrow({ where: { productId: product.id } })).url).toBe(url);
+  await page.goto(`/s/${slug}/productos/foto-qa`);
+  await expect(page.locator(`img[src*="${encodeURIComponent(url)}"]`).first()).toBeVisible();
+
+  // Cross-site and demo sessions are refused.
+  expect((await page.request.post("/api/admin/uploads", { multipart: { file: { name: "a.png", mimeType: "image/png", buffer: png } }, headers: { Origin: "https://evil.example" } })).status()).toBe(403);
+  if (process.env.DEMO_LOGIN_ENABLED === "true") {
+    await page.context().clearCookies();
+    await page.goto("/login");
+    await page.getByRole("button", { name: /tienda demo/ }).click();
+    await expect(page).toHaveURL(/\/admin$/);
+    const res = await page.request.post("/api/admin/uploads", { multipart: { file: { name: "a.png", mimeType: "image/png", buffer: png } }, headers: { Origin: "http://localhost:3100" } });
+    expect(res.status()).toBe(403);
+    expect((await res.json()).error).toBe("En modo demo no se pueden subir archivos.");
+  }
 });
 
 test("product screens fit a phone", async ({ page }) => {

@@ -5,7 +5,8 @@ describe("isAllowedImageUrl", () => {
   it("accepts configured hosts and local uploads", () => {
     expect(isAllowedImageUrl("https://images.unsplash.com/photo-1?w=800")).toBe(true);
     expect(isAllowedImageUrl("https://res.cloudinary.com/demo/image/upload/a.jpg")).toBe(true);
-    expect(isAllowedImageUrl("/uploads/store/a.jpg")).toBe(true);
+    expect(isAllowedImageUrl("/uploads/cmg1abcd1234/Ab3_x-9ZkQ1mN0pQrS.jpg")).toBe(true);
+    expect(isAllowedImageUrl("/uploads/store/a.jpg")).toBe(false);
   });
   it("rejects hosts the storefront cannot render, http and path tricks", () => {
     expect(isAllowedImageUrl("https://example.com/a.jpg")).toBe(false);

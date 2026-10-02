@@ -6,6 +6,7 @@ import {
   saveContactAction, saveFreeShippingAction, savePaymentsAction, savePoliciesAction, saveShippingMethodAction, saveStoreInfoAction, saveThemeAction,
 } from "@/app/admin/configuracion/actions";
 import { AdminForm, Feedback, Submit, type AdminAction } from "./form-kit";
+import { UploadButton } from "./upload-button";
 import { HEX_COLOR, readableOn } from "@/lib/color";
 
 type Values = Record<string, string>;
@@ -63,7 +64,10 @@ export function StoreInfoForm({ values }: { values: Values }) {
             {(p) => <Textarea {...p} name="description" maxLength={1000} rows={3} defaultValue={values.description ?? ""} />}
           </Field>
           <Text name="announcement" label="Barra de anuncio (opcional)" values={values} errors={e} max={140} placeholder="Envío gratis desde $ 50.000" className="sm:col-span-2" />
-          <Text name="logoUrl" label="Logo (URL, opcional)" values={values} errors={e} max={500} placeholder="https://…" />
+          <div className="flex flex-col gap-1.5">
+            <Text name="logoUrl" label="Logo (opcional)" values={values} errors={e} max={500} placeholder="https://…" />
+            <UploadButton target="logoUrl" label="Subir logo" />
+          </div>
           <Text name="faviconUrl" label="Ícono de pestaña (URL, opcional)" values={values} errors={e} max={500} placeholder="https://…" />
           <Text name="footerText" label="Texto del pie (opcional)" values={values} errors={e} max={300} className="sm:col-span-2" />
           <Text name="seoTitle" label="Título para buscadores (opcional)" values={values} errors={e} max={70} />
