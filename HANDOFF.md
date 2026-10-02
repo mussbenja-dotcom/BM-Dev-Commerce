@@ -2,7 +2,7 @@
 
 - **Fecha:** 2026-10-02
 - **Branch:** `claude/wizardly-cerf-94tq6p` (sesión de Claude Code en la web; `main` sigue en `2bcbafe`). Mergear a `main` cuando se revise.
-- **Hitos de esta sesión:** fix e2e de filtros (`44772f2`) → landing comercial con leads → `/admin/productos` (productos, variantes, stock, categorías).
+- **Hitos de esta sesión:** fix e2e de filtros (`44772f2`) → landing comercial con leads → `/admin/productos` (productos, variantes, stock, categorías) → `/admin/promociones` (cupones).
 - **Push bloqueado:** la app de GitHub de Claude no tiene permiso de escritura en el repo (403 en `git push` y en la API). Los commits quedaron en el contenedor; se entregó un `git bundle` como respaldo. Ver "Cómo traer los commits" abajo.
 - **URL para revisar:** http://localhost:3000/ (landing) · http://localhost:3000/login → "Entrar al panel de la tienda demo" (Alma) → `/admin`.
 
@@ -11,7 +11,7 @@ La tienda pública compra de punta a punta, el comercio gestiona pedidos desde `
 ## Próximo paso exacto
 
 1. **Revisar en tu máquina** (ver "Verificar en local" abajo): aplicar la migración `20261002020158_leads` en la base demo y QA (`npm run db:deploy` con cada `DATABASE_URL`), mirar la landing con las fotos reales de las demos y confirmar el número de `BMDEV_WHATSAPP`.
-2. **Continuar `/admin`:** promociones (cupones), clientes, configuración (productos ya está). Agregar cada sección al array `ITEMS` de `src/components/admin/nav.tsx` solo cuando exista. Mismo patrón que pedidos: servicio en `src/lib/services/admin/*` filtrando por `storeId` de la sesión, reglas puras con tests, Server Actions con Zod + audit, integración con dos tiendas.
+2. **Continuar `/admin`:** clientes y configuración (productos y promociones ya están). Agregar cada sección al array `ITEMS` de `src/components/admin/nav.tsx` solo cuando exista. Mismo patrón que pedidos: servicio en `src/lib/services/admin/*` filtrando por `storeId` de la sesión, reglas puras con tests, Server Actions con Zod + audit, integración con dos tiendas.
 3. **Leads en `/superadmin`:** listado con filtro por estado (`LeadStatus`), detalle y cambio de estado. El modelo ya existe.
 4. `/demo`, superadmin, SEO (sitemap/robots: incluir `/tienda-online`). Al cerrar cada hito: typecheck, lint, tests, build, e2e, actualizar este archivo, commit y push.
 
@@ -37,6 +37,13 @@ Para que futuras sesiones web puedan pushear: dar acceso de escritura a la app d
 - Causa: con el modal "Filtros" abierto, el formulario existía dos veces (sidebar oculto + modal) y los `<select>` estaban envueltos por su `<label>`, cuyo texto incluía todas las opciones ("OrdenarDestacadosMás nuevos…"). `getByLabel("Ordenar", { exact: true })` no encontraba nada.
 - `CatalogFilters` ahora renderiza el formulario en un solo lugar a la vez (el sidebar desmonta su copia mientras el modal está abierto) y Buscar/Ordenar/Categoría usan `htmlFor` + `id`.
 - `playwright.config.ts` acepta `PLAYWRIGHT_CHROMIUM_PATH` opcional para usar un Chromium preinstalado (entornos en la nube). Sin la variable no cambia nada.
+
+### Panel `/admin/promociones` (esta sesión)
+
+- Nav: "Promociones". Crear y editar cupones: porcentaje (1–100), monto fijo o envío gratis; compra mínima, límite de usos, vigencia desde/hasta (fechas en hora argentina; "hasta" vale hasta las 23:59), descripción interna, activo. Estado calculado igual que el checkout: vigente, programado, vencido, sin usos, pausado.
+- Códigos normalizados en mayúsculas sin espacios (`qa 20` → `QA20`), únicos por tienda.
+- **Decisiones:** los cupones se pausan, no se borran; un cupón ya usado no puede cambiar de código (los pedidos guardan el código y la cancelación lo descuenta por código); el límite de usos no puede bajar de los usos ya hechos (la edición bloquea la fila con `FOR UPDATE`).
+- Reglas en `src/lib/services/admin/coupon-rules.ts` (+ tests), servicio `coupons.ts`, acciones `src/app/admin/promociones/actions.ts` (audit `coupon.*`).
 
 ### Panel `/admin/productos` (esta sesión)
 
@@ -121,6 +128,11 @@ Antes de publicar en otro entorno: `npm run db:deploy`.
 - `.env` local contiene `DATABASE_POOL_MAX=1` y `E2E_DATABASE_URL` de QA. No se commitean secretos.
 - `npm run db:seed` recrea solo tiendas `isDemo`; no ejecutarlo para probar cambios sobre datos que se quieran conservar.
 - Seed verificado en QA: Alma 23 productos / 149 variantes, Nativa 10 / 11, Mía 10 / 13, Nido 9 / 13, Detalle 8 / 8.
+
+## Verificaciones (hito promociones)
+
+- typecheck, lint OK. `npm test` 55 OK (+6 `coupon-rules`). `npm run test:integration` 19 OK (+3 `admin-coupons`: un cupón creado en el panel lo acepta `buildQuote` del checkout y deja de valer al pausarlo; código usado no se renombra; límite no baja de los usos; aislamiento entre tiendas). `npm run test:e2e` 12 de 12 OK, dos corridas completas seguidas (+1: crear con error que conserva lo escrito, crear, pausar).
+- Se corrigió un selector ambiguo en `tests/e2e/admin-orders.spec.ts` ("Lucía Compradora" aparece en la tabla desktop y en la lista mobile oculta); fallaba de forma intermitente con el suite completo. Ahora apunta a la celda de la tabla.
 
 ## Verificaciones (hito productos)
 

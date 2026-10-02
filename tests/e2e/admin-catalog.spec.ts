@@ -100,10 +100,36 @@ test("merchant manages categories, products, variants and stock", async ({ page 
   expect((await page.goto(`/admin/productos/${foreignProductId}`))?.status()).toBe(404);
 });
 
+test("merchant creates, validates and pauses a coupon", async ({ page }) => {
+  await login(page);
+  await page.getByRole("navigation", { name: "Panel" }).first().getByRole("link", { name: "Promociones" }).click();
+  const form = page.getByRole("form", { name: "Nuevo cupón" });
+  await form.getByLabel("Código").fill("qa 20");
+  await form.getByLabel("Porcentaje de descuento").fill("150");
+  await form.getByRole("button", { name: "Crear cupón" }).click();
+  await expect(form.getByText("Ingresá un porcentaje entre 1 y 100.").first()).toBeVisible();
+  await expect(form.getByLabel("Código")).toHaveValue("qa 20");
+  await form.getByLabel("Porcentaje de descuento").fill("20");
+  await form.getByLabel("Límite de usos (opcional)").fill("50");
+  await form.getByRole("button", { name: "Crear cupón" }).click();
+  await expect(form.getByRole("status")).toHaveText("Cupón QA20 creado.");
+  const row = page.locator("details", { hasText: "QA20" });
+  await expect(row).toContainText("20 % de descuento");
+  await expect(row).toContainText("0 / 50 usos");
+  await expect(row).toContainText("Vigente");
+  await row.locator("summary").click();
+  await row.getByRole("button", { name: "Pausar" }).click();
+  await expect(row.getByRole("status").first()).toHaveText("Cupón pausado.");
+  await page.reload();
+  await expect(page.locator("details", { hasText: "QA20" })).toContainText("Pausado");
+  const saved = await db.coupon.findFirstOrThrow({ where: { storeId: storeIds[0], code: "QA20" } });
+  expect(saved).toMatchObject({ type: "PERCENT", value: 20, maxUses: 50, active: false });
+});
+
 test("product screens fit a phone", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await login(page);
-  for (const path of ["/admin/productos", "/admin/productos/nuevo", "/admin/productos/categorias"]) {
+  for (const path of ["/admin/productos", "/admin/productos/nuevo", "/admin/productos/categorias", "/admin/promociones"]) {
     await page.goto(path);
     expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
   }

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Package, ReceiptText } from "lucide-react";
+import { LayoutDashboard, Package, ReceiptText, TicketPercent } from "lucide-react";
 import { cn } from "@/components/ui/cn";
 
 // Only screens that exist. Add items here as each admin section ships.
@@ -10,6 +10,7 @@ const ITEMS = [
   { href: "/admin", label: "Inicio", icon: LayoutDashboard, exact: true },
   { href: "/admin/pedidos", label: "Pedidos", icon: ReceiptText, exact: false },
   { href: "/admin/productos", label: "Productos", icon: Package, exact: false },
+  { href: "/admin/promociones", label: "Promociones", icon: TicketPercent, exact: false },
 ];
 
 export function AdminNav({ newOrders, orientation }: { newOrders: number; orientation: "vertical" | "horizontal" }) {

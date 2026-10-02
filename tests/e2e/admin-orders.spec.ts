@@ -72,7 +72,7 @@ test("merchant manages an order end to end and cannot see another store", async 
 
   await page.getByRole("navigation", { name: "Panel" }).first().getByRole("link", { name: /Pedidos/ }).click();
   await expect(page.getByRole("heading", { name: "Pedidos" })).toBeVisible();
-  await expect(page.getByText("Lucía Compradora")).toBeVisible();
+  await expect(page.getByRole("cell", { name: /Lucía Compradora/ })).toBeVisible();
   await expect(page.getByText("Lucía Ajena")).toHaveCount(0);
 
   await page.getByPlaceholder("Número, nombre, email o teléfono").fill("inexistente");
