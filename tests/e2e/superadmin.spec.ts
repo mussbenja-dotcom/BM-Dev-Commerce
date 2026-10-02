@@ -71,6 +71,20 @@ test("BM Dev turns a request into a live store and the owner can log in", async 
   await domain.getByRole("button", { name: "Agregar" }).click();
   await expect(page.getByText(`www.${slug}.com.ar`, { exact: true })).toBeVisible();
 
+  const mp = page.getByRole("form", { name: "Mercado Pago" });
+  await mp.getByLabel("Modo").selectOption("SANDBOX");
+  await mp.getByLabel("Public Key").fill("APP_USR-publica-qa-000000000000");
+  await mp.getByLabel("Access Token").fill("token-invalido");
+  await mp.getByRole("button", { name: "Guardar Mercado Pago" }).click();
+  await expect(mp.getByText("Access Token inválida: empieza con APP_USR- o TEST-.").first()).toBeVisible();
+  const secret = `APP_USR-${tag}-0000000000000000000000-secreto`;
+  await mp.getByLabel("Access Token").fill(secret);
+  await mp.getByRole("button", { name: "Guardar Mercado Pago" }).click();
+  await expect(mp.getByRole("status")).toHaveText("Mercado Pago en modo prueba (sandbox).");
+  await expect(page.getByText("Prueba · token guardado")).toBeVisible();
+  await expect(mp.getByLabel("Access Token")).toHaveValue("");
+  expect(await page.content()).not.toContain(secret);
+
   await page.getByRole("button", { name: "Entrar en modo soporte" }).click();
   await expect(page).toHaveURL(/\/admin$/);
   await expect(page.getByText("Modo soporte BM Dev: los cambios que hagas impactan en esta tienda.")).toBeVisible();
@@ -84,6 +98,24 @@ test("BM Dev turns a request into a live store and the owner can log in", async 
   await expect(page.getByText(`Dulce QA ${tag}`).first()).toBeVisible();
   await page.goto("/superadmin");
   await expect(page).toHaveURL(/\/admin$/);
+});
+
+test("BM Dev restores a demo store after visitors changed it", async ({ page }) => {
+  const demo = await db.store.findFirst({ where: { slug: "nido", isDemo: true } });
+  test.skip(!demo, "demo stores not seeded");
+  await db.store.update({ where: { id: demo!.id }, data: { name: "Nido cambiada por un visitante" } });
+  await login(page, superEmail, password);
+  await expect(page).toHaveURL(/\/superadmin$/);
+  await page.goto(`/superadmin/tiendas/${demo!.id}`);
+  const reset = page.getByRole("form", { name: "Restablecer demo" });
+  await reset.getByRole("button", { name: "Restablecer demo" }).click();
+  await expect(reset.getByText("Confirmá que querés borrar los cambios de la demo.")).toBeVisible();
+  await reset.getByLabel("Sí, quiero borrar los cambios de esta demo").check();
+  await reset.getByRole("button", { name: "Restablecer demo" }).click();
+  await expect(page.getByText("Demo restablecida a su estado original.")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("heading", { name: "Casa Nido" })).toBeVisible();
+  await page.goto("/s/nido");
+  await expect(page.getByText("Nido cambiada por un visitante")).toHaveCount(0);
 });
 
 test("superadmin screens fit a phone", async ({ page }) => {

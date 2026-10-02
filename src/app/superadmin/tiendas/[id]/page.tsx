@@ -8,7 +8,7 @@ import { PLAN_LABEL, STATUS_LABEL } from "@/lib/services/superadmin/constants";
 import { formatPrice } from "@/lib/money";
 import { PageHeader, Panel } from "@/components/admin/order-badges";
 import { formatDateTime } from "@/components/admin/labels";
-import { AddDomainForm, AddUserForm, DomainActions, StoreSettingsForm, UserActions } from "@/components/superadmin/forms";
+import { AddDomainForm, AddUserForm, DomainActions, MercadoPagoForm, ResetDemoForm, StoreSettingsForm, UserActions } from "@/components/superadmin/forms";
 import { Badge } from "@/components/ui/badge";
 import { buttonClasses } from "@/components/ui/button";
 import { enterSupportAction } from "../../actions";
@@ -16,12 +16,14 @@ import { enterSupportAction } from "../../actions";
 export const metadata: Metadata = { title: "Tienda" };
 const ROLE_LABEL = { STORE_OWNER: "Dueño/a", STORE_ADMIN: "Administrador/a", SUPERADMIN_BMDEV: "BM Dev" } as const;
 
-export default async function StoreDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function StoreDetailPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ restablecida?: string }> }) {
   await requireSuperadmin();
   const { id } = await params;
+  const { restablecida } = await searchParams;
   const detail = await getStoreDetail(id.slice(0, 40));
   if (!detail) notFound();
-  const { store, orders30d, gmv30d, lastOrder, activity } = detail;
+  const { store, mercadoPago, orders30d, gmv30d, lastOrder, activity } = detail;
+  const appUrl = (process.env.APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
   const stats: [string, string][] = [
     ["Pedidos 30 días", String(orders30d)],
     ["Ventas 30 días", formatPrice(gmv30d)],
@@ -44,6 +46,7 @@ export default async function StoreDetailPage({ params }: { params: Promise<{ id
         </div>
       </PageHeader>
 
+      {restablecida ? <p className="mb-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800" role="status">Demo restablecida a su estado original.</p> : null}
       <dl className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
         {stats.map(([k, v]) => <div key={k} className="rounded-xl border border-line bg-bg p-3 sm:p-4"><dt className="text-xs text-muted">{k}</dt><dd className="mt-1 text-lg font-semibold tabular-nums">{v}</dd></div>)}
       </dl>
@@ -56,6 +59,18 @@ export default async function StoreDetailPage({ params }: { params: Promise<{ id
       <div className="flex flex-col gap-6">
         <Panel title="Estado, plan y notas">
           <div className="p-4 sm:p-5"><StoreSettingsForm store={{ id: store.id, name: store.name, status: store.status, plan: store.plan, notes: store.notes ?? "" }} /></div>
+        </Panel>
+
+        <Panel title="Mercado Pago" action={<Badge tone={mercadoPago.mode === "PRODUCTION" && mercadoPago.hasToken ? "green" : mercadoPago.mode === "SANDBOX" ? "amber" : "neutral"}>{mercadoPago.mode === "PRODUCTION" ? "Producción" : mercadoPago.mode === "SANDBOX" ? "Prueba" : "Desactivado"}{mercadoPago.hasToken ? " · token guardado" : ""}</Badge>}>
+          <div className="flex flex-col gap-4 p-4 sm:p-5">
+            <p className="text-sm text-muted">
+              Credenciales de la cuenta de Mercado Pago <strong>del comercio</strong> (Tus integraciones → Credenciales). Los cobros van directo a su cuenta; BM Dev no cobra comisión.
+              El aviso de pagos se envía solo a <code className="rounded bg-surface px-1 text-[12px]">{appUrl}/api/webhooks/mercadopago/{store.id}</code> y necesita que el sitio esté publicado con HTTPS.
+              {store.isDemo ? " Esta es una tienda demo: con el modo desactivado usa el simulador." : ""}
+              {!mercadoPago.enabled ? " El comercio tiene Mercado Pago apagado en su Configuración." : ""}
+            </p>
+            <MercadoPagoForm storeId={store.id} current={{ mode: mercadoPago.mode, publicKey: mercadoPago.publicKey, hasToken: mercadoPago.hasToken }} />
+          </div>
         </Panel>
 
         <Panel title="Dominios">
@@ -95,6 +110,10 @@ export default async function StoreDetailPage({ params }: { params: Promise<{ id
           </ul>
           <div className="border-t border-line p-4 sm:p-5"><AddUserForm storeId={store.id} /></div>
         </Panel>
+
+        {store.isDemo ? (
+          <Panel title="Restablecer demo"><div className="p-4 sm:p-5"><ResetDemoForm storeId={store.id} /></div></Panel>
+        ) : null}
 
         <Panel title="Actividad reciente">
           {activity.length ? (

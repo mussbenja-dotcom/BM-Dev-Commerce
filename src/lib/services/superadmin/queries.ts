@@ -66,7 +66,8 @@ export async function getStoreDetail(id: string) {
   const store = await db.store.findUnique({
     where: { id },
     include: {
-      settings: { select: { whatsapp: true, email: true, city: true, province: true, mpMode: true } },
+      // The encrypted token is selected only to report whether it exists; it never reaches the page.
+      settings: { select: { whatsapp: true, email: true, city: true, province: true, mpMode: true, mpPublicKey: true, mpAccessTokenEnc: true, enableMercadoPago: true } },
       theme: { select: { primaryColor: true, accentColor: true, backgroundColor: true, headingFont: true } },
       domains: { orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }] },
       // Never select passwordHash.
@@ -92,6 +93,11 @@ export async function getStoreDetail(id: string) {
     }),
   ]);
 
-  return { store, orders30d, gmv30d: gmv30d._sum.total ?? 0, lastOrder, activity };
+  const { mpAccessTokenEnc, ...settings } = store.settings ?? { mpAccessTokenEnc: null };
+  return {
+    store: { ...store, settings: store.settings ? settings : null },
+    mercadoPago: { mode: store.settings?.mpMode ?? "DEMO", publicKey: store.settings?.mpPublicKey ?? null, hasToken: !!mpAccessTokenEnc, enabled: store.settings?.enableMercadoPago ?? false },
+    orders30d, gmv30d: gmv30d._sum.total ?? 0, lastOrder, activity,
+  };
 }
 export type StoreDetail = NonNullable<Awaited<ReturnType<typeof getStoreDetail>>>;

@@ -9,13 +9,13 @@
 
 | Módulo | Estado |
 |---|---|
-| Mercado Pago | **DEMO** funcionando (simulador aprobado / pendiente / rechazado, webhook que re-consulta e idempotente). Cobro real **BLOQUEADO**: faltan credenciales SANDBOX y HTTPS público. |
+| Mercado Pago | **DEMO** funcionando (simulador aprobado / pendiente / rechazado, webhook que re-consulta e idempotente). Carga de credenciales por tienda desde `/superadmin` lista (token cifrado). Cobro real **BLOQUEADO** hasta probar con credenciales de prueba y HTTPS público. |
 | Storefront (`/s/[slug]`) | TERMINADO: home por `homeSections`, catálogo con filtros y orden (incl. ofertas), producto, carrito, cupones, envío, checkout, confirmación, políticas (incl. términos), 404. |
 | Pedidos + WhatsApp | TERMINADO (el pedido se registra antes de abrir `wa.me`). |
 | Admin (`/admin`) | TERMINADO: dashboard 30 días y más vendidos, pedidos, productos (duplicar), categorías, stock, promociones (cupones y banners), clientes, configuración (tienda, apariencia, contacto, pagos, envíos, políticas, dominio), subida de fotos. |
 | Modo demo / soporte | TERMINADO (banner MODO DEMO, datos bancarios bloqueados en demo; banner y salida de soporte). |
 | Demo comercial (`/demo`) | TERMINADO, con recorrido de 19 pasos probado de punta a punta. |
-| Superadmin | TERMINADO (falta cargar credenciales de MP por tienda y resetear demos). |
+| Superadmin | TERMINADO: solicitudes, tiendas, dominios, usuarios, modo soporte, credenciales de Mercado Pago y restablecer demos. |
 | Landing BM Dev E-commerce | TERMINADO (falta revisar identidad contra bmdev.solutions en tu máquina). |
 | SEO | TERMINADO: metadata, canonical, OG, JSON-LD (Organization, Product, BreadcrumbList, Service), robots y sitemap por host. |
 | Tests | Unitarios, integración (aislamiento entre tiendas) y e2e; ver "Verificaciones". |
@@ -24,7 +24,7 @@
 
 | Integración | Estado |
 |---|---|
-| Mercado Pago | DEMO (real BLOQUEADO por credenciales) |
+| Mercado Pago | DEMO; real configurable pero BLOQUEADO hasta probarlo con credenciales SANDBOX + HTTPS |
 | WhatsApp (pedidos, consultas, leads) | FUNCIONANDO (links `wa.me`, sin API) |
 | Transferencia / efectivo | FUNCIONANDO |
 | Email | PENDIENTE |
@@ -34,10 +34,10 @@
 
 ## Próximo paso exacto
 
-1. **En tu máquina:** `git pull` en `main`, `npm run db:deploy` (migraciones `*_lead_notes_store`, `*_terms_policy`) y opcional `npm run db:seed`.
-2. **Probar Cloudinary** con tus `CLOUDINARY_*` en `.env`: subir una foto desde Productos y verificar que la URL guardada sea `https://res.cloudinary.com/...`. En hosting sin disco persistente (Vercel, Render free) **Cloudinary es obligatorio**: el disco local se pierde en cada deploy.
-3. **Mercado Pago real (P0 bloqueado):** en `/superadmin/tiendas/[id]` agregar carga de Public Key y Access Token (cifrar con `encryptSecret`, nunca devolverlos), selector SANDBOX/PRODUCTION; probar con credenciales de prueba y una URL HTTPS pública para el webhook.
-4. **Reset de demos desde `/superadmin`** (P2): reutilizar la lógica de `prisma/seed.ts` para una sola tienda demo.
+1. **En tu máquina:** `git pull` en `main`, `npm run db:deploy` y `npm run db:seed` (el seed ahora usa `prisma/seed-data/demo.ts`; mismas tiendas y cantidades).
+2. **Probar Mercado Pago SANDBOX (P0):** publicar la app con HTTPS (o un túnel HTTPS propio), en `/superadmin/tiendas/<tienda>` → Mercado Pago: modo "Prueba", Public Key y Access Token **de prueba** del comercio; activar Mercado Pago en su Configuración; comprar con una tarjeta de prueba y verificar que el webhook marque el pedido como pagado. Recién después usar "Producción".
+3. **Probar Cloudinary** con tus `CLOUDINARY_*` (subir una foto y ver que se guarde `https://res.cloudinary.com/...`). Obligatorio en hosting sin disco persistente.
+4. **Despliegue (P1):** hosting + PostgreSQL de producción; variables de la sección "Variables de entorno"; `npm run db:deploy`; dominio de BM Dev E-commerce en `PLATFORM_HOSTS`.
 
 ## Verificar en local (lo que la sesión web no pudo ver)
 
@@ -46,6 +46,11 @@
 - Las e2e/integración de esta sesión corrieron contra un PostgreSQL 16 local del contenedor (no PGlite), con `DATABASE_POOL_MAX=5`.
 
 ## Hitos implementados
+
+### Superadmin: credenciales de Mercado Pago y restablecer demos (esta sesión)
+
+- **Mercado Pago por tienda** (`/superadmin/tiendas/[id]`): modo (desactivado/demo, prueba, producción), Public Key y Access Token. El token se cifra con `ENCRYPTION_KEY` (`encryptSecret`), **nunca vuelve al navegador** (la consulta solo informa si existe) y un campo vacío conserva el guardado; "Borrar credenciales" vuelve a demo. Formato validado (`APP_USR-…` o `TEST-…`), audit sin el secreto. La URL del webhook se envía sola en cada preferencia (`notification_url`); se muestra en la ficha.
+- **Restablecer demo:** solo tiendas `isDemo` con definición en el seed; pide confirmación; recrea catálogo, fotos, colores, textos, cupones, banners y pedidos (nuevo id; cierra sesiones demo). La lógica del seed se movió a `prisma/seed-data/demo.ts` (`seedDemoStore(db, store, hash)`, RNG determinístico por tienda) y `images.json` pasó a `images.ts`. `npm run db:seed` produce las mismas tiendas y cantidades.
 
 ### Subida de fotos (esta sesión)
 
@@ -208,7 +213,12 @@ Las 3, 4 y 5 **faltan aplicarse en tus bases locales** (`npm run db:deploy`). `n
 
 `DATABASE_URL`, `DATABASE_POOL_MAX`, `E2E_DATABASE_URL`, `APP_URL`, `PLATFORM_HOSTS`, `ENCRYPTION_KEY`, `DEMO_LOGIN_ENABLED`, `SUPERADMIN_EMAIL`, `SUPERADMIN_PASSWORD`, `DEMO_ADMIN_PASSWORD`, `BMDEV_WHATSAPP`, `UPLOAD_DIR`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `PLAYWRIGHT_CHROMIUM_PATH` (opcional, solo e2e).
 
-## Verificaciones (último hito: subida de fotos)
+## Verificaciones (último hito: credenciales MP y reset de demos)
+
+- `npx tsc --noEmit` → OK · `npx eslint src` → OK · `npm test` → OK (90) · `npm run test:integration` → OK (37; +credenciales cifradas, conservadas y borradas, sin exponer el token; reset solo de demos con datos restaurados) · `npm run build` → OK, sin warnings · `npm run test:e2e` → OK (25 de 25, dos corridas; +formato inválido, guardado sin eco del token, reset con confirmación).
+- `npm run db:seed` corrido en las bases del contenedor tras el refactor: mismas cantidades (Alma 23/149, Nativa 10/11, Mía 10/13, Nido 9/13, Detalle 8/8).
+
+## Verificaciones (hito subida de fotos)
 
 - `npx tsc --noEmit` → OK
 - `npx eslint src` → OK
@@ -298,7 +308,7 @@ Las 3, 4 y 5 **faltan aplicarse en tus bases locales** (`npm run db:deploy`). `n
 
 ### P0
 
-- Cobro real con Mercado Pago: carga de credenciales por tienda (superadmin) + prueba SANDBOX con HTTPS. **BLOQUEADO** por credenciales/hosting.
+- Cobro real con Mercado Pago: la carga de credenciales ya está; falta la prueba SANDBOX con HTTPS. **BLOQUEADO** por credenciales/hosting.
 
 ### P1
 
@@ -307,7 +317,6 @@ Las 3, 4 y 5 **faltan aplicarse en tus bases locales** (`npm run db:deploy`). `n
 
 ### P2
 
-- Reset de tiendas demo desde superadmin (los visitantes del panel demo pueden cambiar textos y apariencia).
 - Mensaje de confirmación visible tras cancelar un pedido (hoy se ve el estado "Cancelado", el aviso desaparece con el formulario).
 
 ### P3

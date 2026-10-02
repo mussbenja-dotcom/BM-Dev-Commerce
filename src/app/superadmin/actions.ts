@@ -10,10 +10,10 @@ import { ok, run, zf } from "@/lib/services/admin/common";
 import type { ActionResult, ActionState } from "@/lib/services/admin/types";
 import { newStoreSchema } from "@/lib/services/provision";
 import { hostnameSchema, idSchema, PLANS, STATUSES } from "@/lib/services/superadmin/constants";
-import { LEAD_STATUSES } from "@/lib/services/superadmin/rules";
+import { LEAD_STATUSES, MP_CREDENTIAL } from "@/lib/services/superadmin/rules";
 import { updateLead } from "@/lib/services/superadmin/leads";
 import {
-  addDomain, addStoreUser, createStore, removeDomain, resetUserPassword, setDomainVerified, setPrimaryDomain, setUserActive, updateStore,
+  addDomain, addStoreUser, createStore, removeDomain, resetDemoStore, resetUserPassword, setDomainVerified, setMercadoPagoCredentials, setPrimaryDomain, setUserActive, updateStore,
 } from "@/lib/services/superadmin/stores";
 
 const str = (fd: FormData, key: string) => {
@@ -140,6 +140,52 @@ export async function storeUserAction(_prev: ActionState, fd: FormData): Promise
     revalidatePath("/superadmin", "layout");
     return ok(op === "activate" ? `${email} puede volver a ingresar.` : `${email} ya no puede ingresar.`);
   });
+}
+
+// ---------------------------------------------------------------- Mercado Pago
+
+const credential = (label: string) =>
+  z.string().trim().max(300).transform((v) => v || null).refine((v) => v === null || MP_CREDENTIAL.test(v), `${label} inválida: empieza con APP_USR- o TEST-.`);
+
+const mpSchema = z.object({
+  storeId: idSchema,
+  mode: z.enum(["DEMO", "SANDBOX", "PRODUCTION"], { message: "Elegí el modo." }),
+  publicKey: credential("Public Key"),
+  accessToken: credential("Access Token"),
+  clear: zf.bool,
+});
+
+export async function mercadoPagoAction(_prev: ActionState, fd: FormData): Promise<ActionResult> {
+  const s = await requireSuperadmin(); // outside run(): its redirect must not be caught
+  return run(async () => {
+    const { storeId, ...input } = mpSchema.parse({ storeId: str(fd, "storeId"), mode: str(fd, "mode"), publicKey: str(fd, "publicKey"), accessToken: str(fd, "accessToken"), clear: str(fd, "clear") });
+    const r = await setMercadoPagoCredentials(storeId, input);
+    // Never log the credentials themselves.
+    await log(s.userId, input.clear ? "mercadopago.clear" : "mercadopago.update", "store", storeId, storeId, { mode: r.mode, tokenChanged: !!input.accessToken });
+    revalidatePath("/superadmin", "layout");
+    const store = await db.store.findUnique({ where: { id: storeId }, select: { slug: true } });
+    if (store) revalidatePath(`/s/${store.slug}`, "layout");
+    return ok(input.clear ? "Credenciales borradas. Mercado Pago quedó desactivado." : r.mode === "DEMO" ? "Guardado. Mercado Pago no cobra en modo demo." : `Mercado Pago en modo ${r.mode === "SANDBOX" ? "prueba (sandbox)" : "producción"}.`);
+  });
+}
+
+// ---------------------------------------------------------------- demo reset
+
+export async function resetDemoAction(_prev: ActionState, fd: FormData): Promise<ActionResult> {
+  const s = await requireSuperadmin(); // outside run(): its redirect must not be caught
+  const result = await run(async () => {
+    const storeId = idSchema.parse(str(fd, "storeId"));
+    if (str(fd, "confirm") !== "on") return { ok: false, error: "Confirmá que querés borrar los cambios de la demo.", fieldErrors: { confirm: "Confirmalo." } };
+    const r = await resetDemoStore(storeId);
+    await log(s.userId, "demo.reset", "store", r.storeId, r.storeId, { slug: r.slug, previousId: storeId });
+    revalidatePath("/superadmin", "layout");
+    revalidatePath(`/s/${r.slug}`, "layout");
+    revalidatePath("/demo");
+    return ok("Demo restablecida.", { id: r.storeId });
+  });
+  // The store was recreated with a new id.
+  if (result.ok && result.id) redirect(`/superadmin/tiendas/${result.id}?restablecida=1`);
+  return result;
 }
 
 // ---------------------------------------------------------------- support mode
