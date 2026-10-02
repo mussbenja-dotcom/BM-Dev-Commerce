@@ -127,6 +127,7 @@ model Store {
   stockMovements  StockMovement[]
   orderEvents     OrderEvent[]
   auditLogs       AuditLog[]
+  leads           Lead[]
 
   @@index([status])
 }
@@ -589,6 +590,10 @@ model Lead {
   source          String     @default("tienda-online")
   ip              String?
   status          LeadStatus @default(NEW)
+  // Internal BM Dev notes and the store the request became, if any.
+  notes           String?
+  storeId         String?
+  store           Store?     @relation(fields: [storeId], references: [id], onDelete: SetNull)
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 

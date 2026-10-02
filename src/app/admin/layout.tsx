@@ -5,6 +5,7 @@ import { requireStoreSession } from "@/lib/auth/session";
 import { logoutAction } from "@/lib/auth/actions";
 import { db } from "@/lib/db";
 import { AdminNav } from "@/components/admin/nav";
+import { exitSupportAction } from "@/app/superadmin/actions";
 
 export const metadata: Metadata = { title: { default: "Panel — BM Dev Commerce", template: "%s — Panel" }, robots: { index: false } };
 
@@ -59,11 +60,14 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       </header>
 
       <div className="min-w-0 flex-1">
-        {session.supportMode || store.isDemo ? (
+        {session.supportMode ? (
+          <form action={exitSupportAction} className="flex flex-wrap items-center justify-center gap-3 border-b border-amber-200 bg-amber-50 px-4 py-2 text-[13px] text-amber-900 lg:px-8" role="status">
+            <span>Modo soporte BM Dev: los cambios que hagas impactan en esta tienda.</span>
+            <button type="submit" className="font-medium underline">Salir del modo soporte</button>
+          </form>
+        ) : store.isDemo ? (
           <p className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-center text-[13px] text-amber-900 lg:px-8" role="status">
-            {session.supportMode
-              ? "Modo soporte BM Dev: los cambios que hagas impactan en esta tienda."
-              : "Tienda de demostración: podés probar todas las funciones con datos de ejemplo."}
+            Tienda de demostración: podés probar todas las funciones con datos de ejemplo.
           </p>
         ) : null}
         <main className="mx-auto w-full max-w-6xl px-4 py-6 lg:px-8 lg:py-8">{children}</main>
