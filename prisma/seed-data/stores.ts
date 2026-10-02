@@ -1,6 +1,6 @@
 /**
  * Demo catalogue for the five showcase stores. Image values are keys
- * resolved against images.json (curated Unsplash photos).
+ * resolved against images.ts (curated Unsplash photos).
  */
 
 export type SeedVariant = { o1?: string; o2?: string; hex?: string; stock: number; price?: number };

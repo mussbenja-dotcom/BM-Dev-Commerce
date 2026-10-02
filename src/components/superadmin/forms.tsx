@@ -7,7 +7,7 @@ import { AdminForm, Feedback, Submit } from "@/components/admin/form-kit";
 import type { ActionState } from "@/lib/services/admin/types";
 import { LEAD_STATUSES, LEAD_STATUS_LABEL, suggestSlug } from "@/lib/services/superadmin/rules";
 import {
-  addDomainAction, addStoreUserAction, createStoreAction, domainAction, storeUserAction, updateLeadAction, updateStoreAction,
+  addDomainAction, addStoreUserAction, createStoreAction, domainAction, mercadoPagoAction, resetDemoAction, storeUserAction, updateLeadAction, updateStoreAction,
 } from "@/app/superadmin/actions";
 
 /** Temporary credentials are only in this response: they are stored hashed. */
@@ -246,6 +246,59 @@ export function UserActions({ storeId, user }: { storeId: string; user: { id: st
             </Submit>
           </div>
           {state?.credentials ? <Credentials state={state} /> : <Feedback state={state} />}
+        </>
+      )}
+    </AdminForm>
+  );
+}
+
+export function MercadoPagoForm({ storeId, current }: { storeId: string; current: { mode: string; publicKey: string | null; hasToken: boolean } }) {
+  return (
+    <AdminForm action={mercadoPagoAction} resetOnSuccess label="Mercado Pago" className="grid gap-4 sm:grid-cols-2">
+      {(state, pending) => {
+        const e = state?.fieldErrors ?? {};
+        return (
+          <>
+            <input type="hidden" name="storeId" value={storeId} />
+            <Field label="Modo" error={e.mode} hint="Prueba usa credenciales de prueba y no cobra dinero real.">
+              {(p) => (
+                <Select {...p} name="mode" defaultValue={current.mode}>
+                  <option value="DEMO">Desactivado / demo</option>
+                  <option value="SANDBOX">Prueba (sandbox)</option>
+                  <option value="PRODUCTION">Producción (cobros reales)</option>
+                </Select>
+              )}
+            </Field>
+            <Field label="Public Key" error={e.publicKey}>
+              {(p) => <Input {...p} name="publicKey" defaultValue={current.publicKey ?? ""} autoComplete="off" spellCheck={false} className="font-mono text-[13px]" placeholder="APP_USR-…" />}
+            </Field>
+            <Field label="Access Token" error={e.accessToken} hint={current.hasToken ? "Ya hay uno guardado (cifrado). Dejalo vacío para conservarlo." : "Se guarda cifrado y no se vuelve a mostrar."} className="sm:col-span-2">
+              {(p) => <Input {...p} name="accessToken" type="password" autoComplete="new-password" spellCheck={false} className="font-mono text-[13px]" placeholder={current.hasToken ? "••••••••••••" : "APP_USR-…"} />}
+            </Field>
+            <label className="flex items-center gap-2 text-sm text-red-700 sm:col-span-2"><input type="checkbox" name="clear" className="size-4 accent-current" /> Borrar las credenciales guardadas</label>
+            <div className="flex items-center gap-3 sm:col-span-2">
+              <Submit pending={pending} size="sm" pendingLabel="Guardando…">Guardar Mercado Pago</Submit>
+              <Feedback state={state} />
+            </div>
+          </>
+        );
+      }}
+    </AdminForm>
+  );
+}
+
+export function ResetDemoForm({ storeId }: { storeId: string }) {
+  return (
+    <AdminForm action={resetDemoAction} label="Restablecer demo" className="flex flex-col gap-3">
+      {(state, pending) => (
+        <>
+          <input type="hidden" name="storeId" value={storeId} />
+          <p className="text-sm text-muted">Vuelve la demo a su estado original: productos, fotos, colores, textos, cupones, banners y pedidos de ejemplo. Se pierden los cambios que hayan hecho los visitantes y se cierran sus sesiones demo.</p>
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="confirm" className="size-4 accent-current" /> Sí, quiero borrar los cambios de esta demo</label>
+          <div className="flex items-center gap-3">
+            <Submit pending={pending} size="sm" variant="danger" pendingLabel="Restableciendo…">Restablecer demo</Submit>
+            <Feedback state={state} />
+          </div>
         </>
       )}
     </AdminForm>

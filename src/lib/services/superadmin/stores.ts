@@ -2,9 +2,12 @@ import "server-only";
 import { db } from "@/lib/db";
 import { Prisma, type StorePlan, type StoreStatus } from "@/generated/prisma/client";
 import { hashPassword } from "@/lib/auth/password";
+import { encryptSecret } from "@/lib/crypto";
 import { AdminError } from "@/lib/services/admin/common";
 import { provisionStore, type NewStoreInput } from "@/lib/services/provision";
 import { tempPassword } from "./rules";
+import { seedDemoStore } from "../../../../prisma/seed-data/demo";
+import { SEED_STORES } from "../../../../prisma/seed-data/stores";
 
 const isUnique = (err: unknown) => err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002";
 
@@ -126,4 +129,52 @@ export async function setUserActive(storeId: string, userId: string, active: boo
     ...(active ? [] : [db.session.deleteMany({ where: { userId: user.id } })]),
   ]);
   return user.email;
+}
+
+// ---------------------------------------------------------------- Mercado Pago
+
+export type MercadoPagoInput = { mode: "DEMO" | "SANDBOX" | "PRODUCTION"; publicKey: string | null; accessToken: string | null; clear: boolean };
+
+/**
+ * Stores a store's own Mercado Pago credentials. The access token is encrypted
+ * (ENCRYPTION_KEY) and never read back: an empty field keeps the saved one.
+ */
+export async function setMercadoPagoCredentials(storeId: string, input: MercadoPagoInput) {
+  const current = await db.storeSettings.findUnique({ where: { storeId }, select: { mpAccessTokenEnc: true } });
+  if (!current) throw new AdminError("No encontramos la tienda.");
+  if (input.clear) {
+    await db.storeSettings.update({ where: { storeId }, data: { mpMode: "DEMO", mpPublicKey: null, mpAccessTokenEnc: null } });
+    return { mode: "DEMO" as const, hasToken: false };
+  }
+  const hasToken = !!input.accessToken || !!current.mpAccessTokenEnc;
+  if (input.mode !== "DEMO" && !hasToken) throw new AdminError("Para cobrar con Mercado Pago cargá el Access Token.", { accessToken: "Falta el Access Token." });
+  if (input.mode !== "DEMO" && !input.publicKey) throw new AdminError("Cargá la Public Key.", { publicKey: "Falta la Public Key." });
+  await db.storeSettings.update({
+    where: { storeId },
+    data: {
+      mpMode: input.mode,
+      mpPublicKey: input.publicKey,
+      ...(input.accessToken ? { mpAccessTokenEnc: encryptSecret(input.accessToken) } : {}),
+    },
+  });
+  return { mode: input.mode, hasToken };
+}
+
+// ---------------------------------------------------------------- demo reset
+
+/**
+ * Rebuilds a demo store from its curated seed (catalogue, banners, coupons,
+ * orders). Only stores flagged isDemo with a seed definition can be reset.
+ * The store gets a new id; open demo sessions are closed.
+ */
+export async function resetDemoStore(storeId: string) {
+  const store = await db.store.findUnique({ where: { id: storeId }, select: { slug: true, isDemo: true } });
+  if (!store) throw new AdminError("No encontramos la tienda.");
+  if (!store.isDemo) throw new AdminError("Solo se pueden restablecer tiendas demo.");
+  const definition = SEED_STORES.find((s) => s.slug === store.slug);
+  if (!definition) throw new AdminError("Esta demo no tiene datos de ejemplo para restablecer.");
+  const password = process.env.DEMO_ADMIN_PASSWORD || tempPassword();
+  const newId = await seedDemoStore(db, definition, await hashPassword(password), () => {});
+  if (!newId) throw new AdminError("No se pudo restablecer la demo.");
+  return { storeId: newId, slug: store.slug };
 }

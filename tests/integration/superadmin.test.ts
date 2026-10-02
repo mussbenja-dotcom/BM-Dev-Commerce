@@ -88,3 +88,51 @@ describe("superadmin", () => {
     expect(await db.user.count({ where: { id: staff.id } })).toBe(1);
   });
 });
+
+describe("Mercado Pago credentials", () => {
+  it("encrypts the token, keeps it when the field is empty and never returns it", async () => {
+    const { setMercadoPagoCredentials } = await import("@/lib/services/superadmin/stores");
+    const { getStoreDetail } = await import("@/lib/services/superadmin/queries");
+    const { decryptSecret } = await import("@/lib/crypto");
+    const { mercadoPagoAvailable } = await import("@/lib/services/admin/settings-rules");
+    const r = await newStore("mp");
+    const token = `APP_USR-${"1234567890".repeat(4)}-secreto`;
+    await expect(setMercadoPagoCredentials(r.storeId, { mode: "SANDBOX", publicKey: "APP_USR-publica-0000000000000000", accessToken: null, clear: false })).rejects.toMatchObject({ fieldErrors: { accessToken: expect.any(String) } });
+    await setMercadoPagoCredentials(r.storeId, { mode: "SANDBOX", publicKey: "APP_USR-publica-0000000000000000", accessToken: token, clear: false });
+    let settings = await db.storeSettings.findUniqueOrThrow({ where: { storeId: r.storeId } });
+    expect(settings.mpAccessTokenEnc).not.toContain(token);
+    expect(decryptSecret(settings.mpAccessTokenEnc!)).toBe(token);
+    expect(mercadoPagoAvailable({ isDemo: false, mpMode: settings.mpMode, hasToken: true })).toBe(true);
+
+    await setMercadoPagoCredentials(r.storeId, { mode: "PRODUCTION", publicKey: "APP_USR-publica-0000000000000000", accessToken: null, clear: false });
+    settings = await db.storeSettings.findUniqueOrThrow({ where: { storeId: r.storeId } });
+    expect(settings.mpMode).toBe("PRODUCTION");
+    expect(decryptSecret(settings.mpAccessTokenEnc!)).toBe(token);
+
+    const detail = await getStoreDetail(r.storeId);
+    expect(detail!.mercadoPago).toEqual({ mode: "PRODUCTION", publicKey: "APP_USR-publica-0000000000000000", hasToken: true, enabled: true });
+    expect(JSON.stringify(detail)).not.toContain(settings.mpAccessTokenEnc!);
+
+    await setMercadoPagoCredentials(r.storeId, { mode: "PRODUCTION", publicKey: null, accessToken: null, clear: true });
+    expect(await db.storeSettings.findUniqueOrThrow({ where: { storeId: r.storeId } })).toMatchObject({ mpMode: "DEMO", mpAccessTokenEnc: null, mpPublicKey: null });
+  });
+});
+
+describe("demo reset", () => {
+  it("rebuilds only demo stores from their seed", async () => {
+    const { resetDemoStore } = await import("@/lib/services/superadmin/stores");
+    const real = await newStore("real-reset");
+    await expect(resetDemoStore(real.storeId)).rejects.toThrow("Solo se pueden restablecer tiendas demo.");
+    const demo = await db.store.findFirst({ where: { slug: "detalle", isDemo: true } });
+    if (!demo) return; // demo stores not seeded in this database
+    await db.store.update({ where: { id: demo.id }, data: { name: "Vandalizada" } });
+    const r = await resetDemoStore(demo.id);
+    expect(r.slug).toBe("detalle");
+    expect(await db.store.findUnique({ where: { id: demo.id } })).toBeNull();
+    const fresh = await db.store.findUniqueOrThrow({ where: { id: r.storeId }, include: { _count: { select: { products: true, orders: true } } } });
+    expect(fresh).toMatchObject({ name: "Detalle Regalos", isDemo: true, status: "ACTIVE" });
+    expect(fresh._count.products).toBe(8);
+    expect(fresh._count.orders).toBeGreaterThan(0);
+    expect(await db.user.count({ where: { storeId: r.storeId, isDemo: true, role: "STORE_OWNER" } })).toBe(1);
+  }, 60_000);
+});

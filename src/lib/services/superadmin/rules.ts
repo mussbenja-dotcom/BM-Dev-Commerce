@@ -40,3 +40,6 @@ export function suggestSlug(name: string): string {
     .slice(0, 40)
     .replace(/-+$/, "");
 }
+
+/** Mercado Pago credentials look like "APP_USR-…" (current accounts) or "TEST-…" (legacy test). */
+export const MP_CREDENTIAL = /^(APP_USR|TEST)-[A-Za-z0-9-]{20,200}$/;

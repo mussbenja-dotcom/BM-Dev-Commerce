@@ -1,4 +1,5 @@
-{
+/** Curated Unsplash photos for the demo stores (base URLs; size params are added when used). */
+export const IMAGES: Record<string, Record<string, string>> = {
   "alma": {
     "banner-1": "https://images.unsplash.com/photo-1759229874914-c1ffdb3ebd0c",
     "banner-2": "https://images.unsplash.com/photo-1605108040941-7c762d5ed4e4",
@@ -100,4 +101,4 @@
     "llavero-cuero-1": "https://images.unsplash.com/photo-1675582090584-4ae9400f7326",
     "portarretrato-1": "https://images.unsplash.com/photo-1683523946422-64283e8af4d5"
   }
-}
+};
