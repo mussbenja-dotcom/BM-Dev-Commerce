@@ -2,7 +2,8 @@
 
 - **Fecha:** 2026-10-02
 - **Branch:** `claude/wizardly-cerf-94tq6p` (sesión de Claude Code en la web; `main` sigue en `2bcbafe`). Mergear a `main` cuando se revise.
-- **Hitos de esta sesión:** fix e2e de filtros (`44772f2`) → landing comercial `/tienda-online` + `/` con leads (este commit).
+- **Hitos de esta sesión:** fix e2e de filtros (`44772f2`) → landing comercial con leads → `/admin/productos` (productos, variantes, stock, categorías).
+- **Push bloqueado:** la app de GitHub de Claude no tiene permiso de escritura en el repo (403 en `git push` y en la API). Los commits quedaron en el contenedor; se entregó un `git bundle` como respaldo. Ver "Cómo traer los commits" abajo.
 - **URL para revisar:** http://localhost:3000/ (landing) · http://localhost:3000/login → "Entrar al panel de la tienda demo" (Alma) → `/admin`.
 
 La tienda pública compra de punta a punta, el comercio gestiona pedidos desde `/admin` y la landing comercial capta pedidos de tienda (leads). **Faltan:** resto del panel (productos, stock, promociones, clientes, configuración), listado de leads en `/superadmin`, `/demo`, superadmin y cobros reales con Mercado Pago.
@@ -10,9 +11,18 @@ La tienda pública compra de punta a punta, el comercio gestiona pedidos desde `
 ## Próximo paso exacto
 
 1. **Revisar en tu máquina** (ver "Verificar en local" abajo): aplicar la migración `20261002020158_leads` en la base demo y QA (`npm run db:deploy` con cada `DATABASE_URL`), mirar la landing con las fotos reales de las demos y confirmar el número de `BMDEV_WHATSAPP`.
-2. **Continuar `/admin`:** productos/variantes/stock e historial (`StockMovement`), promociones (cupones), clientes, configuración. Agregar cada sección al array `ITEMS` de `src/components/admin/nav.tsx` solo cuando exista. Mismo patrón que pedidos: servicio en `src/lib/services/admin/*` filtrando por `storeId` de la sesión, reglas puras con tests, Server Actions con Zod + audit, integración con dos tiendas.
+2. **Continuar `/admin`:** promociones (cupones), clientes, configuración (productos ya está). Agregar cada sección al array `ITEMS` de `src/components/admin/nav.tsx` solo cuando exista. Mismo patrón que pedidos: servicio en `src/lib/services/admin/*` filtrando por `storeId` de la sesión, reglas puras con tests, Server Actions con Zod + audit, integración con dos tiendas.
 3. **Leads en `/superadmin`:** listado con filtro por estado (`LeadStatus`), detalle y cambio de estado. El modelo ya existe.
 4. `/demo`, superadmin, SEO (sitemap/robots: incluir `/tienda-online`). Al cerrar cada hito: typecheck, lint, tests, build, e2e, actualizar este archivo, commit y push.
+
+## Cómo traer los commits (si el push no llegó a GitHub)
+
+```bash
+git fetch /ruta/al/archivo.bundle claude/wizardly-cerf-94tq6p:claude/wizardly-cerf-94tq6p
+git checkout claude/wizardly-cerf-94tq6p && npm install && npm run db:deploy
+```
+
+Para que futuras sesiones web puedan pushear: dar acceso de escritura a la app de GitHub de Claude sobre `mussbenja-dotcom/BM-Dev-Commerce` (https://github.com/apps/claude/installations/select_target) o reconectar GitHub en claude.ai.
 
 ## Verificar en local (lo que la sesión web no pudo ver)
 
@@ -27,6 +37,17 @@ La tienda pública compra de punta a punta, el comercio gestiona pedidos desde `
 - Causa: con el modal "Filtros" abierto, el formulario existía dos veces (sidebar oculto + modal) y los `<select>` estaban envueltos por su `<label>`, cuyo texto incluía todas las opciones ("OrdenarDestacadosMás nuevos…"). `getByLabel("Ordenar", { exact: true })` no encontraba nada.
 - `CatalogFilters` ahora renderiza el formulario en un solo lugar a la vez (el sidebar desmonta su copia mientras el modal está abierto) y Buscar/Ordenar/Categoría usan `htmlFor` + `id`.
 - `playwright.config.ts` acepta `PLAYWRIGHT_CHROMIUM_PATH` opcional para usar un Chromium preinstalado (entornos en la nube). Sin la variable no cambia nada.
+
+### Panel `/admin/productos` (esta sesión)
+
+- Nav: "Productos". `/admin/productos` (búsqueda por nombre/SKU/marca/SKU de variante, filtro por categoría y estado: visibles, ocultos, stock bajo; paginación), `/admin/productos/nuevo`, `/admin/productos/[id]`, `/admin/productos/categorias`.
+- Alta: crea el producto **y su primera variante** (mismo SKU) con stock inicial y movimiento `INITIAL`. Slug derivado del nombre con sufijo `-2`, `-3` si se repite; un slug explícito repetido se informa en el campo. Precio anterior debe ser mayor al de venta. Imágenes por URL https (una por línea, hasta 8; la primera es la principal). Subida de archivos sigue pendiente.
+- Variantes: opciones, SKU (normalizado en mayúsculas, único por tienda), precio propio opcional, color, umbral de stock bajo, a la venta sí/no. Combinación de opciones repetida → error.
+- Stock: ajuste manual "Ingresar / Descontar / Contar (fijar)" con motivo. `adjustStock` bloquea la fila de la variante (`SELECT … FOR UPDATE`), nunca deja stock negativo y registra `ADJUSTMENT` con delta y stock resultante. Historial de los últimos 30 movimientos por producto (inicial, venta, ajuste, cancelación).
+- **Decisión:** los productos no se borran, se ocultan ("Ocultar de la tienda"): los pedidos viejos siguen apuntando a ellos. Lo mismo para variantes ("a la venta" no) y categorías ("visible" no).
+- Renombrar una categoría cambia su slug (y su URL pública `/categorias/<slug>`).
+- Reglas puras en `src/lib/services/admin/product-rules.ts` (+ tests); servicio `products.ts` filtra todo por `storeId`; acciones en `src/app/admin/productos/actions.ts` con Zod + audit (`product.*`, `variant.*`, `stock.adjust`, `category.*`) y revalidan la tienda pública.
+- `src/components/admin/form-kit.tsx`: `AdminForm` (envía con transición para no perder lo escrito si el servidor rechaza), `Submit`, `Feedback`. `order-actions.tsx` reutiliza `Submit`/`Feedback` de ahí.
 
 ### Landing comercial BM Dev E-commerce (esta sesión)
 
@@ -100,6 +121,10 @@ Antes de publicar en otro entorno: `npm run db:deploy`.
 - `.env` local contiene `DATABASE_POOL_MAX=1` y `E2E_DATABASE_URL` de QA. No se commitean secretos.
 - `npm run db:seed` recrea solo tiendas `isDemo`; no ejecutarlo para probar cambios sobre datos que se quieran conservar.
 - Seed verificado en QA: Alma 23 productos / 149 variantes, Nativa 10 / 11, Mía 10 / 13, Nido 9 / 13, Detalle 8 / 8.
+
+## Verificaciones (hito productos)
+
+- typecheck, lint OK. `npm test` 49 OK (+8 de `product-rules`). `npm run test:integration` 16 OK (+4 `admin-products`: aislamiento entre dos tiendas en lectura/edición/variantes/stock/categoría ajena, slug con sufijo, SKU repetido, ajustes con historial, dos descuentos simultáneos → solo uno pasa, ocultar no borra). Build OK. `npm run test:e2e` 11 de 11 OK (+2 `admin-catalog`: categoría, alta con error de precio que conserva lo escrito, variante, ajuste inválido y válido, historial, ocultar → 404 en la tienda, producto de otra tienda → 404, pantallas a 390 px sin scroll horizontal).
 
 ## Verificaciones (sesión landing, contenedor web con PostgreSQL 16 local)
 

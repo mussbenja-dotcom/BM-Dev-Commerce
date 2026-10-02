@@ -1,36 +1,14 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState } from "react";
-import { useFormStatus } from "react-dom";
 import { Button } from "@/components/ui/button";
+import { Feedback, Submit } from "./form-kit";
 import { Field, Select, Textarea } from "@/components/ui/field";
 import type { ActionResult, ActionState } from "@/lib/services/admin/types";
 import { addOrderNoteAction, cancelOrderAction, updateOrderStatusAction, updatePaymentStatusAction } from "@/app/admin/pedidos/actions";
 import { ORDER_STATUS, PAYMENT_STATUS, type OrderStatusKey, type PaymentStatusKey } from "./labels";
 
 type Action = (prev: ActionState, fd: FormData) => Promise<ActionResult>;
-
-function Submit({ children, pendingLabel, ...props }: React.ComponentProps<typeof Button> & { pendingLabel: string }) {
-  const { pending } = useFormStatus();
-  return (
-    <Button type="submit" disabled={pending} {...props}>
-      {pending ? pendingLabel : children}
-    </Button>
-  );
-}
-
-function Feedback({ state }: { state: ActionState }) {
-  if (!state) return null;
-  return state.ok ? (
-    <p className="text-[13px] text-emerald-700" role="status">
-      {state.message}
-    </p>
-  ) : (
-    <p className="text-[13px] text-red-600" role="alert">
-      {state.error}
-    </p>
-  );
-}
 
 function useAction(action: Action) {
   return useActionState<ActionState, FormData>(action, undefined);
