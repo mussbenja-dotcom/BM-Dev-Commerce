@@ -1,19 +1,24 @@
-﻿# Estado actual — BM Dev Commerce Engine
+# Estado actual — BM Dev Commerce Engine
 
 - **Fecha:** 2026-10-01
 - **Branch:** `main`
-- **Hito anterior publicado:** `72976c0` — Mercado Pago y webhook.
-- **Hito de este handoff:** storefront y checkout completos para el recorrido demo; commit `feat: complete storefront and checkout purchase flow`.
-- **URL para revisar:** http://localhost:3000/s/alma (abierta en Chrome a pedido del usuario).
+- **Hitos:** `72976c0` Mercado Pago → `b43a07f` storefront y checkout (commit local, **sin push**) → panel `/admin` de pedidos (este handoff; commit `feat: add merchant order management panel`, sin push).
+- **Sesión que escribió este archivo:** Claude Code, continuando el trabajo de ChatGPT. Se cortó por límite de tokens.
+- **URL para revisar:** http://localhost:3000/login → "Entrar al panel de la tienda demo" (Alma) → `/admin`.
 
-La tienda pública ya permite comprar de punta a punta: catálogo, producto, carrito, checkout, pedido y simulador de pago. **No están terminados el panel del comercio, superadmin, landing ni cobros reales con Mercado Pago.**
+La tienda pública compra de punta a punta y el comercio ya gestiona pedidos desde `/admin`. **Faltan:** resto del panel (productos, stock, promociones, clientes, configuración), `/demo`, superadmin, **landing comercial** y cobros reales con Mercado Pago.
 
 ## Próximo paso exacto
 
-1. Implementar el primer recorrido completo de `/admin`: dashboard → listado de pedidos → detalle → cambios de estado y cancelación con reposición de stock. Usar `requireStoreSession()` y filtrar siempre por `session.storeId`. Revisar los helpers existentes de `src/lib/services/admin`.
-2. Probar con dos tiendas que ningún listado, detalle o mutación pueda acceder a la otra. Una cancelación repetida debe reponer stock una sola vez. Decidir explícitamente cómo manejar pedidos pagados: cambiar el estado local no equivale a hacer un reembolso en Mercado Pago.
-3. Al cerrar el hito: typecheck, lint, tests, build, navegador, actualizar este archivo, commit y push.
-4. Continuar con productos/variantes/stock, promociones, clientes y configuración. Luego `/demo`, superadmin y landing. Priorizar recorridos completos.
+1. **Arreglar la prueba e2e que falla** `tests/e2e/storefront.spec.ts:76` ("home, search, category, filters…"): `getByLabel("Ordenar", { exact: true })` hace timeout dentro del modal "Filtros" a 390 px. No se tocó código de la tienda en esta sesión; pasaba en el hito anterior. Revisar `src/components/store/catalog-filters.tsx` / `catalog-page.tsx` (el `<select name="orden">` está dentro de un `<label>`; los `children` se renderizan dos veces: sidebar oculto + modal). Ver `test-results/storefront-home-search-*/error-context.md` y el trace. Las otras 5 pruebas e2e pasan.
+2. **Landing comercial BM Dev E-commerce** según `docs/LANDING_BRIEF.md` (brief completo del usuario). Plan propuesto:
+   - Ruta `/tienda-online` y que `/` (hoy create-next-app en `src/app/page.tsx`) muestre/redirija a la landing. `/login` ya enlaza a `/tienda-online`.
+   - Modelo nuevo `Lead` (migración: nombre, negocio, whatsapp, email, instagram, rubro, vendeOnline, cantidadProductos, necesidad, tieneDominio?, usaMercadoPago?, comentario, origen, ip, createdAt, status). Server Action con Zod, rate limit (`src/lib/rate-limit.ts`), honeypot, audit. Sin precios.
+   - Helper único para WhatsApp de BM Dev leyendo `BMDEV_WHATSAPP` (ya existe en `.env`; revisar `src/lib/whatsapp.ts`). Mensaje prearmado del brief.
+   - Sección demo con previews desktop / celular / panel (capturas reales de `/s/alma` y `/admin`) y links a las 5 demos. Revisar https://bmdev.solutions para identidad visual antes de diseñar.
+   - Luego listar leads en `/superadmin`.
+3. Continuar `/admin`: productos/variantes/stock e historial, promociones (cupones), clientes, configuración. Agregar cada sección al array `ITEMS` de `src/components/admin/nav.tsx` solo cuando exista.
+4. `/demo`, superadmin, SEO. Al cerrar cada hito: typecheck, lint, tests, build, e2e, actualizar este archivo, commit (y push si el usuario lo autoriza: **los commits `b43a07f` y el del panel no están pusheados**).
 
 ## Hitos implementados
 
@@ -38,6 +43,18 @@ La tienda pública ya permite comprar de punta a punta: catálogo, producto, car
 - `/pago/[token]` y `POST /api/store/[slug]/orders/[token]/payment`: simulación aprobada, pendiente y rechazada con comprobaciones en el servidor. Reintento tras rechazo. Un parámetro de retorno no acredita un pago.
 - WhatsApp abre un mensaje construido desde el pedido persistido. Se genera el enlace; no se enviaron mensajes a terceros durante QA.
 - El checkout que ya creó el pedido pero no pudo iniciar Mercado Pago devuelve una confirmación recuperable, sin volver a descontar stock.
+
+### Panel `/admin` — pedidos (esta sesión)
+
+- `src/app/admin/layout.tsx`: `requireStoreSession()`, sidebar desktop / barra mobile, contador de pedidos nuevos, "Ver tienda", salir, aviso de demo o modo soporte. Navegación solo con pantallas existentes (`src/components/admin/nav.tsx`).
+- `/admin`: ventas de hoy y del mes (excluye cancelados), pedidos nuevos, pagos pendientes, últimos pedidos, barras de 7 días, stock bajo (`stock <= lowStockAlert`).
+- `/admin/pedidos`: pestañas por estado con conteos, búsqueda por número/nombre/email/teléfono, filtro de pago, paginación de 20, tabla desktop y tarjetas mobile.
+- `/admin/pedidos/[id]`: productos, totales, cliente (+WhatsApp), entrega, pago, historial con notas internas. En mobile los controles van primero.
+- Reglas puras en `src/lib/services/admin/order-rules.ts` (+ tests): estados solo hacia adelante (se pueden saltear pasos); entregado y cancelado cerrados; no se cancela un entregado.
+- Servicio `src/lib/services/admin/orders.ts`: todas las consultas filtran por `storeId` de la sesión; mutaciones con `SELECT … FOR UPDATE` sobre el pedido (misma serialización que el webhook de MP).
+- **Cancelación:** repone stock una sola vez (`CANCEL_RESTOCK`), descuenta `soldCount`, libera el uso del cupón, revierte `ordersCount/totalSpent` del cliente y registra un evento. Segunda cancelación → error, sin reponer de nuevo. Variantes borradas se informan en el evento.
+- **Decisión pagos:** cancelar un pedido PAGADO exige tildar que el comercio gestiona el reintegro; el estado de pago **sigue PAID** (no se hace reembolso en MP). Aviso visible en el detalle. En métodos manuales (transferencia/efectivo/WhatsApp) el comercio puede marcar pagado (NEW pasa a CONFIRMED), volver a pendiente o reintegrado. El estado de pagos de Mercado Pago **no se edita a mano**.
+- Server Actions en `src/app/admin/pedidos/actions.ts`: Zod, sesión fuera de `run()` (para no tragar el redirect), audit log `order.*`, `revalidatePath`. Cancelar revalida también la tienda pública.
 
 ## Arquitectura y decisiones
 
@@ -65,7 +82,18 @@ Antes de publicar en otro entorno: `npm run db:deploy`.
 - `npm run db:seed` recrea solo tiendas `isDemo`; no ejecutarlo para probar cambios sobre datos que se quieran conservar.
 - Seed verificado en QA: Alma 23 productos / 149 variantes, Nativa 10 / 11, Mía 10 / 13, Nido 9 / 13, Detalle 8 / 8.
 
-## Verificaciones del hito
+## Verificaciones (sesión del panel)
+
+- `npm run typecheck` OK (tras `npm run build`; antes fallaba solo por tipos de rutas viejos en `.next/types`).
+- `npm run lint` OK.
+- `npm test`: 30 OK (24 previas + 6 de reglas de pedidos).
+- `npm run test:integration`: 8 OK. Nuevo `tests/integration/admin-orders.test.ts`: aislamiento entre dos tiendas (lectura, listado, estado, cancelación, pago y notas de otra tienda → "No encontramos el pedido."), estados hacia adelante, doble cancelación simultánea repone stock una vez, cupón y cliente revertidos, pedido pagado exige confirmación, MP no editable a mano. Nota: con `DATABASE_POOL_MAX=1` la concurrencia queda serializada por el pool; en PostgreSQL real la protege el `FOR UPDATE`.
+- `npm run build` OK.
+- `npm run test:e2e`: 5 de 6 OK. Nuevo `tests/e2e/admin-orders.spec.ts` (login real, dashboard, listado, búsqueda vacía, marcar pagado, cambiar estado, nota, cancelar con confirmación de reintegro, stock repuesto, reintegrado, pedido ajeno → 404, mobile 390 px sin scroll horizontal). **Falla** la de filtros de la tienda (ver Próximo paso 1).
+- Capturas revisadas: `test-results/manual/admin-dashboard-1280.png`, `admin-orders-390.png`, `admin-order-detail-390.png`.
+- **Windows/OneDrive:** `next build` falló con `EPERM unlink .next\serverppdmin` porque OneDrive convirtió carpetas de `.next` en marcadores sincronizados (ReparsePoint/ReadOnly). Se resolvió borrando esa carpeta con `Remove-Item -Recurse -Force`. Recomendado: mover el proyecto fuera de OneDrive o excluir `.next` de la sincronización.
+
+### Verificaciones del hito storefront (anterior)
 
 - `npm run typecheck`: OK.
 - `npm run lint`: OK, sin warnings.
@@ -92,7 +120,9 @@ Antes de publicar en otro entorno: `npm run db:deploy`.
 
 ### P0
 
-- Panel `/admin`: dashboard, pedidos, productos/variantes, stock e historial, promociones, clientes, configuración.
+- Arreglar e2e de filtros de la tienda (ver Próximo paso 1).
+- Landing comercial según `docs/LANDING_BRIEF.md` + modelo `Lead` + reemplazo de `/`.
+- Panel `/admin` restante: productos/variantes, stock e historial, promociones, clientes, configuración. (Dashboard y pedidos: hechos.)
 - `/demo`: selector de rubros, ver tienda y login demo al panel. No enviar usuarios a pantallas todavía inexistentes.
 - Validación Mercado Pago SANDBOX con credenciales y HTTPS antes de ofrecer cobros reales.
 
@@ -116,7 +146,8 @@ Antes de publicar en otro entorno: `npm run db:deploy`.
 - `src/lib/services/payments/mercadopago.ts`, webhook y sus pruebas
 - `prisma/schema.prisma`, `prisma/migrations`, `prisma/seed.ts`
 - `tests/integration/*`, `tests/e2e/storefront.spec.ts`, `playwright.config.ts`
-- Helpers admin existentes: `src/lib/services/admin/{common,types}.ts`, `src/components/admin/labels.ts`
+- Admin: `src/app/admin/*`, `src/lib/services/admin/{common,types,orders,order-rules}.ts`, `src/components/admin/{labels,nav,order-badges,order-actions}.tsx`
+- Brief de la landing: `docs/LANDING_BRIEF.md`
 - Helpers superadmin: `src/lib/services/superadmin/{constants,queries}.ts`
 
 Referencias consultadas: [Mercado Pago Preferences API](https://www.mercadopago.com.ar/developers/es/reference/online-payments/checkout-pro-preferences/create-preference/post), [Prisma conexiones](https://www.prisma.io/docs/orm/prisma-client/setup-and-configuration/databases-connections).
