@@ -35,7 +35,10 @@ export async function listCustomers(storeId: string, f: { q?: string; sort: Cust
       orderBy: ORDER_BY[f.sort],
       skip: (f.page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
-      select: { id: true, firstName: true, lastName: true, email: true, phone: true, ordersCount: true, totalSpent: true, createdAt: true },
+      select: {
+        id: true, firstName: true, lastName: true, email: true, phone: true, ordersCount: true, totalSpent: true, createdAt: true,
+        orders: { where: { storeId }, orderBy: { createdAt: "desc" }, take: 1, select: { createdAt: true } },
+      },
     }),
     db.customer.aggregate({ where: { storeId }, _count: true, _sum: { totalSpent: true } }),
   ]);

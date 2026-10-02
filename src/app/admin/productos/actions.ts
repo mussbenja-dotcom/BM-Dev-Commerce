@@ -4,11 +4,11 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireStoreSession } from "@/lib/auth/session";
 import { audit } from "@/lib/audit";
-import { AdminError, isImageUrl, ok, revalidateStore, run, zf } from "@/lib/services/admin/common";
+import { AdminError, IMAGE_URL_MESSAGE, isImageUrl, ok, revalidateStore, run, zf } from "@/lib/services/admin/common";
 import type { ActionResult, ActionState } from "@/lib/services/admin/types";
 import type { Actor } from "@/lib/services/admin/orders";
 import { MAX_STOCK, normalizeSku } from "@/lib/services/admin/product-rules";
-import { adjustStock, createProduct, saveCategory, saveVariant, setProductActive, updateProduct } from "@/lib/services/admin/products";
+import { adjustStock, createProduct, duplicateProduct, saveCategory, saveVariant, setProductActive, updateProduct } from "@/lib/services/admin/products";
 
 const id = z.string().trim().min(1).max(40);
 const optionalId = z.string().trim().max(40).transform((v) => v || null);
@@ -52,7 +52,7 @@ const productSchema = z.object({
   images: z
     .string()
     .transform((v) => v.split(/\s*\n\s*/).map((s) => s.trim()).filter(Boolean))
-    .pipe(z.array(z.string().max(500).refine(isImageUrl, "Cada imagen tiene que ser una URL https://")).max(8, "Hasta 8 imágenes.")),
+    .pipe(z.array(z.string().max(500).refine(isImageUrl, IMAGE_URL_MESSAGE)).max(8, "Hasta 8 imágenes.")),
 });
 const PRODUCT_KEYS = Object.keys(productSchema.shape);
 
@@ -154,4 +154,15 @@ export async function saveCategoryAction(_prev: ActionState, fd: FormData): Prom
     if (!r) throw new AdminError("No pudimos guardar la categoría.");
     return done(a, categoryId ? "category.update" : "category.create", "category", r.id, categoryId ? "Categoría guardada." : "Categoría creada.");
   });
+}
+
+export async function duplicateProductAction(_prev: ActionState, fd: FormData): Promise<ActionResult> {
+  const a = await actor(); // outside run(): its redirect must not be caught
+  const result = await run(async () => {
+    const productId = id.parse(str(fd, "productId"));
+    const copy = await duplicateProduct(a, productId);
+    return done(a, "product.duplicate", "product", copy.id, "Copia creada.", { from: productId });
+  });
+  if (result.ok && result.id) redirect(`/admin/productos/${result.id}?copia=1`);
+  return result;
 }

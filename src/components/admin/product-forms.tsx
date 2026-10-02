@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select, Textarea } from "@/components/ui/field";
-import { adjustStockAction, saveCategoryAction, saveProductAction, saveVariantAction, setProductActiveAction } from "@/app/admin/productos/actions";
+import { adjustStockAction, duplicateProductAction, saveCategoryAction, saveProductAction, saveVariantAction, setProductActiveAction } from "@/app/admin/productos/actions";
 import { AdminForm, Feedback, Submit } from "./form-kit";
 
 type Category = { id: string; name: string };
@@ -270,6 +270,20 @@ export function CategoryForm({ category }: { category: CategoryValues }) {
           </>
         );
       }}
+    </AdminForm>
+  );
+}
+
+export function DuplicateProductForm({ productId }: { productId: string }) {
+  return (
+    <AdminForm action={duplicateProductAction} className="flex flex-col items-end gap-1">
+      {(state, pending) => (
+        <>
+          <input type="hidden" name="productId" value={productId} />
+          <Submit pending={pending} pendingLabel="Duplicando…" variant="secondary" size="sm">Duplicar</Submit>
+          <Feedback state={state} />
+        </>
+      )}
     </AdminForm>
   );
 }

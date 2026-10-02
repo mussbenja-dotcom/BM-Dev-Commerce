@@ -73,6 +73,8 @@ export async function provisionStore(
               "Tenés 30 días para cambios. El producto debe estar sin uso y con su etiqueta. El primer cambio es sin cargo.",
             privacyPolicy:
               "Usamos tus datos solo para procesar tu pedido y contactarte por él. No compartimos tu información con terceros.",
+            termsPolicy:
+              "Los precios y el stock se confirman al finalizar la compra. El pedido queda registrado al confirmarse el pago o el medio elegido. Las promociones no son acumulables salvo que se indique lo contrario.",
           },
         },
         theme: {

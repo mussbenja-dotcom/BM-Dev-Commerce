@@ -1,18 +1,43 @@
 # Estado actual — BM Dev Commerce Engine
 
 - **Fecha:** 2026-10-02
-- **Branch de trabajo:** `claude/wizardly-cerf-94tq6p` (sesión de Claude Code en la web). `main` ya tiene todo lo anterior (PR #1 mergeado: landing + panel `/admin` completo).
-- **Hitos de esta sesión:** fix e2e de filtros → landing comercial con leads → `/admin` productos, promociones, clientes y configuración → **`/superadmin`** (solicitudes, tiendas, dominios, usuarios, modo soporte).
-- **URLs para revisar:** `/` (landing) · `/login` → "Entrar al panel de la tienda demo" → `/admin` · `/login` con `SUPERADMIN_EMAIL`/`SUPERADMIN_PASSWORD` del `.env` → `/superadmin`.
+- **Branch:** `claude/wizardly-cerf-94tq6p` (se mergea a `main` por PR al cerrar cada tanda; `main` tiene hasta el PR #2).
+- **Último commit:** ver `git log -1` (este archivo se actualiza en el mismo commit que cierra cada hito).
+- **Revisar:** `/` landing · `/demo` · `/s/alma` · `/login` → "Entrar al panel de la tienda demo" → `/admin` · `/login` con `SUPERADMIN_EMAIL` → `/superadmin`.
+
+## Estado por módulo
+
+| Módulo | Estado |
+|---|---|
+| Mercado Pago | **DEMO** funcionando (simulador aprobado / pendiente / rechazado, webhook que re-consulta e idempotente). Cobro real **BLOQUEADO**: faltan credenciales SANDBOX y HTTPS público. |
+| Storefront (`/s/[slug]`) | TERMINADO: home por `homeSections`, catálogo con filtros y orden (incl. ofertas), producto, carrito, cupones, envío, checkout, confirmación, políticas (incl. términos), 404. |
+| Pedidos + WhatsApp | TERMINADO (el pedido se registra antes de abrir `wa.me`). |
+| Admin (`/admin`) | TERMINADO: dashboard 30 días y más vendidos, pedidos, productos (duplicar), categorías, stock, promociones (cupones y banners), clientes, configuración (tienda, apariencia, contacto, pagos, envíos, políticas, dominio). Falta subida de archivos. |
+| Modo demo / soporte | TERMINADO (banner MODO DEMO, datos bancarios bloqueados en demo; banner y salida de soporte). |
+| Demo comercial (`/demo`) | TERMINADO, con recorrido de 19 pasos probado de punta a punta. |
+| Superadmin | TERMINADO (falta cargar credenciales de MP por tienda y resetear demos). |
+| Landing BM Dev E-commerce | TERMINADO (falta revisar identidad contra bmdev.solutions en tu máquina). |
+| SEO | TERMINADO: metadata, canonical, OG, JSON-LD (Organization, Product, BreadcrumbList, Service), robots y sitemap por host. |
+| Tests | Unitarios, integración (aislamiento entre tiendas) y e2e; ver "Verificaciones". |
+
+## Integraciones
+
+| Integración | Estado |
+|---|---|
+| Mercado Pago | DEMO (real BLOQUEADO por credenciales) |
+| WhatsApp (pedidos, consultas, leads) | FUNCIONANDO (links `wa.me`, sin API) |
+| Transferencia / efectivo | FUNCIONANDO |
+| Email | PENDIENTE |
+| Subida de imágenes (Cloudinary / local) | PENDIENTE (hoy URLs de Unsplash/Cloudinary) |
+| Dominio propio | PARCIAL: mapeo por host y sitemap por dominio probados con header `Host`; falta probar DNS + HTTPS reales |
+| Envíos por API | PENDIENTE (P3) |
 
 ## Próximo paso exacto
 
-1. **En tu máquina:** `git pull` en `main` y `npm run db:deploy` (migraciones `20261002020158_leads` y `*_lead_notes_store`). Opcional `npm run db:seed` (solo recrea tiendas demo; actualiza CBU/CUIT ficticios válidos y crea el superadmin si está en `.env`).
-2. **`/demo`:** selector de rubros con las 5 demos, "ver tienda" y "ver el panel" (login demo). La landing ya enlaza a `/s/<demo>`; falta la página dedicada.
-3. **SEO:** `sitemap.xml` y `robots.txt` (incluir `/tienda-online`; excluir `/admin`, `/superadmin`, `/login`, checkout/pedido), canonical y Open Graph por tienda, JSON-LD de producto.
-4. **Imágenes:** subida de archivos (Cloudinary o `/public/uploads`) para productos, logo y categorías; hoy son URLs.
-5. **Mercado Pago real:** carga de credenciales por tienda desde `/superadmin` (cifradas con `ENCRYPTION_KEY`) y prueba en SANDBOX con HTTPS antes de ofrecer cobros reales.
-6. Personalización visual desde el panel (colores, plantilla, secciones del inicio). Al cerrar cada hito: typecheck, lint, tests, build, e2e, actualizar este archivo, commit y push.
+1. **En tu máquina:** `git pull` en `main`, `npm run db:deploy` (migraciones nuevas: `*_lead_notes_store`, `*_terms_policy`) y opcional `npm run db:seed` (solo tiendas demo: términos por defecto, CBU/CUIT válidos, superadmin si está en `.env`).
+2. **Imágenes (P2, desbloquea a los comercios):** crear `src/app/api/admin/uploads/route.ts` (sesión de tienda, `isSameOrigin`, rate limit, tipos jpeg/png/webp, máx. 4 MB, sin SVG; bloqueado en `session.isDemo`) que guarde en Cloudinary si están `CLOUDINARY_*` o en `public/uploads/<storeId>/`; agregar un botón "Subir" en `ProductForm`, logo y banners que complete la URL. `src/lib/image-hosts.ts` ya acepta `/uploads/`.
+3. **Mercado Pago real (P0 bloqueado):** en `/superadmin/tiendas/[id]` agregar carga de Public Key y Access Token (cifrar con `encryptSecret`, nunca devolverlos), selector SANDBOX/PRODUCTION; probar con credenciales de prueba y una URL HTTPS pública para el webhook.
+4. **Reset de demos desde `/superadmin`** (P2): reutilizar la lógica de `prisma/seed.ts` para una sola tienda demo.
 
 ## Verificar en local (lo que la sesión web no pudo ver)
 
@@ -21,6 +46,34 @@
 - Las e2e/integración de esta sesión corrieron contra un PostgreSQL 16 local del contenedor (no PGlite), con `DATABASE_POOL_MAX=5`.
 
 ## Hitos implementados
+
+### SEO, tests de precios/WhatsApp y orden "ofertas" (esta sesión)
+
+- `src/lib/seo.ts`: `storeMetadata` (título, descripción ≤160, canonical con el origen real —dominio propio verificado o `APP_URL/s/slug`—, Open Graph, Twitter) y `jsonLdString` (escapa `<`, `>`, `&`). **Decisión:** las tiendas demo son `noindex, follow` (son ficticias). Búsquedas y filtros: `noindex` con canonical al catálogo completo.
+- JSON-LD: `Organization` en la home de cada tienda; `Product` (`AggregateOffer` en ARS, disponibilidad) + `BreadcrumbList` en producto; `BreadcrumbList` en catálogo/categoría; `Organization` + `Service` en la landing.
+- `src/app/robots.ts` y `src/app/sitemap.ts` según el `Host`: en el dominio de la plataforma listan `/tienda-online`, `/demo` y las tiendas reales activas **sin** dominio propio verificado; en el dominio de una tienda, solo esa tienda. El proxy ya no reescribe `/robots.txt` ni `/sitemap.xml`. Se excluyen checkout, pedido, pago, admin, superadmin, login y API.
+- Landing: imagen Open Graph generada con `next/og` (`/tienda-online/opengraph-image`) y descripción orientada a "tienda online personalizada en Argentina".
+- Tests unitarios dedicados: `src/lib/pricing.test.ts` (merge de líneas, tope por línea, stock, cupones %, fijo y envío gratis, umbral de envío gratis después del cupón, retiro, descuento por transferencia sobre el monto con cupón y tope 50 %, `couponError`) y `src/lib/whatsapp.test.ts`.
+- Catálogo: orden "Ofertas primero" (`compareAtPrice` desc, nulos al final).
+
+### `/demo` comercial (esta sesión)
+
+- `/demo?rubro=<slug>`: presentación con selector de las demos (datos reales: nombre, rubro, colores, productos), "Ver tienda" (`/s/<slug>`), "Ver panel del negocio" (`demoLoginAction` con el slug elegido; se oculta si `DEMO_LOGIN_ENABLED` no es `true`), cupones activos de esa tienda y el **recorrido de 19 pasos** para una reunión. Los pasos con link usan datos reales (primera categoría, producto destacado con stock, término de búsqueda) y la e2e verifica que todos respondan 200.
+- La landing ahora lleva "Ver demo" a `/demo`.
+- **e2e `demo-tour.spec.ts`:** recorre la reunión completa en Alma a 390 px: inicio, búsqueda con sugerencias, filtros, producto, variante, carrito, `BIENVENIDA10`, envío, checkout por WhatsApp (pedido registrado antes de abrir `wa.me`, mensaje con el número), panel demo, cambio de estado, stock descontado, pantallas de producto, promociones y métricas; al final cancela el pedido desde el panel (stock y cupón vuelven).
+
+### Huecos P0.5 del panel `/admin` (esta sesión)
+
+- **Modo demo:** una sesión demo (`session.isDemo`) no puede cambiar datos bancarios: el servicio `updatePayments` conserva los guardados aunque el formulario mande otros, y la UI los muestra deshabilitados. Banner "MODO DEMO" en todo el panel. Dominio y credenciales de Mercado Pago no son editables por el comercio (solo BM Dev desde `/superadmin`). Todavía no hay subida de archivos.
+- **Dashboard:** gráfico SVG de 30 días (sin librerías) y "Más vendidos (30 días)" desde `OrderItem` excluyendo cancelados.
+- **Productos:** "Duplicar" crea una copia oculta, con SKUs `-COPIA` libres, mismas fotos/variantes y **stock 0**.
+- **Stock** (`/admin/stock`): todas las variantes, filtros stock bajo / agotado, búsqueda, ajuste en línea con motivo y últimos 25 movimientos de la tienda.
+- **Promociones:** banners de portada y de promoción (título, textos, botón con link **interno** de la tienda —se rechazan URLs externas y `//`—, imagen, orden, visible). Ofertas y destacados se marcan en el producto (precio anterior / destacado).
+- **Clientes:** fecha del último pedido.
+- **Configuración → Apariencia:** plantilla (opcional: aplicar sus colores y tipografías), colores con selector y vista previa, tipografías, mayúsculas, bordes, portada, fotos, y secciones del inicio con orden. Se valida contraste texto/fondo (WCAG ≥ 4.5) y que el color principal se distinga; el color del texto de los botones se calcula solo (`src/lib/color.ts`).
+- **Configuración → Dominio:** solo lectura (dominios, principal, conectado) + contacto con BM Dev.
+- **Políticas:** nueva "Términos y condiciones" (`StoreSettings.termsPolicy`, migración `*_terms_policy`), ruta `/s/[slug]/politicas/terminos`, link en el footer y texto por defecto al crear tiendas.
+- **Bug corregido:** el admin aceptaba cualquier URL `https://` de imagen, pero `next/image` solo renderiza los hosts configurados (una imagen de otro host rompía la página). Ahora `src/lib/image-hosts.ts` es la única lista, usada por `next.config.ts` y por la validación del admin (Unsplash, Cloudinary y `/uploads/`).
 
 ### Panel interno `/superadmin` (esta sesión)
 
@@ -120,30 +173,52 @@
 
 ## Arquitectura y decisiones
 
-- Next.js 16.3.8 App Router, React 19, TypeScript, Tailwind 4, Prisma 7.10 con adapter pg, Zod 4. Leer las guías locales en `node_modules/next/dist/docs/` antes de tocar convenciones de Next.
-- `package.json` declara `type: module` para compatibilidad del cliente Prisma generado con Playwright. El seed usa `new URL(..., import.meta.url)` en lugar de `__dirname`; se verificó ejecutándolo en QA.
-- Todas las entidades comerciales tienen `storeId`; las páginas/API cargan tiendas ACTIVE. El cliente recibe una selección explícita de campos públicos, no tokens cifrados ni settings completos.
-- `src/lib/store/resolve.ts`: contexto de tienda, base de enlaces y origen; `proxy.ts` reescribe dominios propios a `/s/[slug]`. El dominio personalizado real sigue sin probarse.
-- Sesiones: cookie httpOnly con token aleatorio; solo SHA-256 en DB; roles y modo soporte existentes.
-- `src/lib/pricing.ts` calcula en pesos enteros. Checkout descuenta stock mediante actualización condicional y limita usos de cupones dentro de la transacción.
-- `src/lib/db.ts` comparte un cliente entre bundles del servidor. `DATABASE_POOL_MAX` configura el pool; default 10 si se omite.
-- No ejecutar procesos QA en paralelo contra la misma instancia PGlite que sirve la UI. Usar una base independiente mediante `E2E_DATABASE_URL`.
+- **Stack:** Next.js 16.3.8 App Router, React 19, TypeScript, Tailwind 4, Prisma 7.10 + adapter pg, PostgreSQL, Zod 4, bcryptjs, lucide-react. Leer `node_modules/next/dist/docs/` antes de tocar convenciones de Next (`proxy.ts`, `params` como Promise, `images.qualities`). `package.json` es `type: module`.
+- **Multi-tienda:** una sola app. Toda entidad comercial tiene `storeId`; el admin lo toma siempre de la sesión (`requireStoreSession`), nunca del cliente. `src/proxy.ts` reescribe dominios propios a `/s/[slug]`; `src/lib/store/resolve.ts` da contexto, base de links y origen. Las tiendas públicas son solo `ACTIVE`.
+- **Auth:** cookie httpOnly `bm_session` con token aleatorio; en DB solo SHA-256. Roles `SUPERADMIN_BMDEV`, `STORE_OWNER`, `STORE_ADMIN`. Modo soporte = superadmin con `Session.supportStoreId`. Sesiones demo de 4 h (`isDemo`).
+- **Storefront:** `src/app/s/[slug]/*` + `src/components/store/*`; tema por CSS variables (`themeStyle`), plantillas en `src/lib/templates.ts`.
+- **Checkout / precios:** `src/lib/pricing.ts` (pesos enteros, puro) + `src/lib/services/checkout.ts` (recarga productos, variantes, cupón, envío y settings; descuento de stock condicional; `checkoutKey` idempotente).
+- **Mercado Pago:** `src/lib/services/payments/mercadopago.ts` + webhook `/api/webhooks/mercadopago/[storeId]` (re-consulta el pago con el token de esa tienda; valida tienda, monto, moneda y ambiente; idempotente).
+- **Admin:** `src/app/admin/*`, servicios en `src/lib/services/admin/*` (reglas puras con tests), Server Actions con Zod + audit, formularios con `AdminForm` (no pierde lo escrito ante errores).
+- **Superadmin:** `src/app/superadmin/*`, servicios en `src/lib/services/superadmin/*`; alta con `provisionStore`.
+- **Demo:** tiendas `isDemo` del seed, `/demo`, login demo (`DEMO_LOGIN_ENABLED`).
+- **Landing BM Dev E-commerce:** `/` y `/tienda-online`; leads en `Lead`; WhatsApp solo vía `src/lib/bmdev.ts`.
+- **Imágenes:** `src/lib/image-hosts.ts` es la única lista de hosts (Unsplash, Cloudinary, `/uploads/`) para `next.config.ts` y la validación del admin.
+- `DATABASE_POOL_MAX` configura el pool (1 para Prisma dev/PGlite; 5–10 para PostgreSQL real). No correr QA en paralelo contra la base que sirve la UI: usar `E2E_DATABASE_URL`.
 
 ## Base de datos
 
-Migraciones aplicadas tanto a la base demo como a QA:
+Migraciones (todas aditivas desde `init`):
 
 1. `20261002000400_init`
-2. `20261002020000_checkout_idempotency`: agrega `Order.checkoutKey` nullable y unique compuesto `(storeId, checkoutKey)`.
-3. `20261002020158_leads`: enum `LeadStatus` y tabla `Lead`. **Pendiente de aplicar en tus bases locales** (solo se aplicó en las bases descartables del contenedor web).
+2. `20261002020000_checkout_idempotency` — `Order.checkoutKey` + unique `(storeId, checkoutKey)`.
+3. `20261002020158_leads` — enum `LeadStatus` y tabla `Lead`.
+4. `*_lead_notes_store` — `Lead.notes`, `Lead.storeId` (FK `SET NULL`).
+5. `*_terms_policy` — `StoreSettings.termsPolicy`.
 
-Antes de publicar en otro entorno: `npm run db:deploy`.
+Las 3, 4 y 5 **faltan aplicarse en tus bases locales** (`npm run db:deploy`). `npm run db:seed` recrea solo tiendas `isDemo` (y crea el superadmin si `SUPERADMIN_EMAIL`/`SUPERADMIN_PASSWORD` están definidos). Demo local: Prisma dev `bmdev` (puerto 51214); QA: `bmdev-qa` (51218). En las sesiones web se usa un PostgreSQL 16 descartable del contenedor.
 
-- Demo local: Prisma dev `bmdev`, PostgreSQL en `localhost:51214`.
-- QA local: Prisma dev `bmdev-qa`, PostgreSQL en `localhost:51218`. La CLI imprimió 51218 aunque se solicitaron otros puertos; usar siempre la URL efectiva.
-- `.env` local contiene `DATABASE_POOL_MAX=1` y `E2E_DATABASE_URL` de QA. No se commitean secretos.
-- `npm run db:seed` recrea solo tiendas `isDemo`; no ejecutarlo para probar cambios sobre datos que se quieran conservar.
-- Seed verificado en QA: Alma 23 productos / 149 variantes, Nativa 10 / 11, Mía 10 / 13, Nido 9 / 13, Detalle 8 / 8.
+## Variables de entorno (solo nombres)
+
+`DATABASE_URL`, `DATABASE_POOL_MAX`, `E2E_DATABASE_URL`, `APP_URL`, `PLATFORM_HOSTS`, `ENCRYPTION_KEY`, `DEMO_LOGIN_ENABLED`, `SUPERADMIN_EMAIL`, `SUPERADMIN_PASSWORD`, `DEMO_ADMIN_PASSWORD`, `BMDEV_WHATSAPP`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `PLAYWRIGHT_CHROMIUM_PATH` (opcional, solo e2e).
+
+## Verificaciones (último hito: SEO y tests)
+
+- `npx tsc --noEmit` → OK
+- `npx eslint src` → OK
+- `npm test` → OK (87)
+- `npm run test:integration` → OK (32)
+- `npm run build` → OK
+- `npm run test:e2e` → OK (23 de 23; incluye `seo.spec.ts`: robots/sitemap por host, canonical, OG, JSON-LD seguro, demo `noindex`, imagen OG)
+
+## Verificaciones (hito /demo)
+
+- `npx tsc --noEmit` OK · `npx eslint src` OK · `npm test` 73 OK · `npm run test:integration` 32 OK · `npm run build` OK · `npm run test:e2e` 20 de 20 OK en dos corridas seguidas.
+- Nota QA: una corrida intermedia de `demo-tour` falló antes de cancelar y dejó un pedido de prueba en la tienda Alma de la base **QA del contenedor** (no afecta tus bases).
+
+## Verificaciones (hito huecos P0.5)
+
+- `npx tsc --noEmit` OK · `npx eslint src` OK · `npm test` 73 OK (+ color, image-hosts) · `npm run test:integration` 32 OK (+`admin-extras`: duplicar sin stock y aislado, stock/movimientos por tienda, banners con link interno y aislados, contraste/plantilla, dashboard 30 días; +demo no cambia datos bancarios) · `npm run build` OK · `npm run test:e2e` 18 de 18 OK.
 
 ## Verificaciones (hito superadmin)
 
@@ -213,23 +288,24 @@ Antes de publicar en otro entorno: `npm run db:deploy`.
 
 ### P0
 
-- ~~Arreglar e2e de filtros~~ y ~~landing comercial + `Lead` + reemplazo de `/`~~: hechos en esta sesión.
-- Listado/gestión de leads en `/superadmin`.
-- Panel `/admin` restante: productos/variantes, stock e historial, promociones, clientes, configuración. (Dashboard y pedidos: hechos.)
-- `/demo`: selector de rubros, ver tienda y login demo al panel. No enviar usuarios a pantallas todavía inexistentes.
-- Validación Mercado Pago SANDBOX con credenciales y HTTPS antes de ofrecer cobros reales.
+- Cobro real con Mercado Pago: carga de credenciales por tienda (superadmin) + prueba SANDBOX con HTTPS. **BLOQUEADO** por credenciales/hosting.
 
 ### P1
 
-- `/superadmin`: tiendas, alta (`provisionStore`), estado, dominios, plan, usuarios y soporte.
-- SEO completo: canonical, OG, JSON-LD, robots y sitemap por tienda. Solo metadata básica de home y noindex de compra implementados.
-- Tests unitarios dedicados para precios/WhatsApp; hoy están cubiertos parcialmente por recorridos y checkout con DB.
+- Revisar identidad visual de la landing contra bmdev.solutions (bloqueado por red en la sesión web; colores en `BRAND` de `landing-page.tsx`).
+- Despliegue: hosting, PostgreSQL de producción, `APP_URL`, `PLATFORM_HOSTS`, HTTPS y dominio de BM Dev E-commerce.
 
-### P2 / P3
+### P2
 
-- Subida de imágenes validada (Cloudinary / local); reset demo desde superadmin.
-- OAuth de Mercado Pago, emails, envíos por API, cuentas de cliente, rate limit distribuido.
-- Firma de webhook con secreto configurable y conciliación administrativa; reembolsos parciales.
+- Subida de imágenes validada (Cloudinary / local) para productos, logo, categorías y banners.
+- Reset de tiendas demo desde superadmin (los visitantes del panel demo pueden cambiar textos y apariencia).
+- Mensaje de confirmación visible tras cancelar un pedido (hoy se ve el estado "Cancelado", el aviso desaparece con el formulario).
+
+### P3
+
+- OAuth de Mercado Pago, emails transaccionales, envíos por API, cuentas de cliente, rate limit distribuido.
+- Firma de webhook con secreto configurable, conciliación y reembolsos parciales.
+- Actualizar dependencias con avisos de `npm audit` (ver "Fallos encontrados").
 
 ## Archivos de referencia
 
@@ -240,6 +316,8 @@ Antes de publicar en otro entorno: `npm run db:deploy`.
 - `tests/integration/*`, `tests/e2e/storefront.spec.ts`, `playwright.config.ts`
 - Admin: `src/app/admin/*`, `src/lib/services/admin/{common,types,orders,order-rules}.ts`, `src/components/admin/{labels,nav,order-badges,order-actions}.tsx`
 - Landing: `docs/LANDING_BRIEF.md` (brief), `src/app/tienda-online/*`, `src/components/landing/*`, `src/lib/bmdev.ts`, `src/lib/services/{landing,leads/*}.ts`
-- Helpers superadmin: `src/lib/services/superadmin/{constants,queries}.ts`
+- Superadmin: `src/app/superadmin/*`, `src/lib/services/superadmin/*`, `src/components/superadmin/*`
+- SEO: `src/lib/seo.ts`, `src/app/{robots,sitemap}.ts`, `src/lib/services/sitemap.ts`, `src/components/store/json-ld.tsx`
+- Demo: `src/app/demo/page.tsx`, `tests/e2e/demo-tour.spec.ts`
 
 Referencias consultadas: [Mercado Pago Preferences API](https://www.mercadopago.com.ar/developers/es/reference/online-payments/checkout-pro-preferences/create-preference/post), [Prisma conexiones](https://www.prisma.io/docs/orm/prisma-client/setup-and-configuration/databases-connections).

@@ -9,12 +9,33 @@ import { formatDateTime } from "@/components/admin/labels";
 
 export const metadata: Metadata = { title: "Inicio" };
 
-const weekdayFmt = new Intl.DateTimeFormat("es-AR", { timeZone: "America/Argentina/Buenos_Aires", weekday: "short" });
+const dayFmt = new Intl.DateTimeFormat("es-AR", { timeZone: "America/Argentina/Buenos_Aires", day: "numeric", month: "short" });
+
+/** 30 bars in plain SVG: no chart library for a single small chart. */
+function SalesChart({ days }: { days: { key: string; date: Date; total: number; count: number }[] }) {
+  const max = Math.max(1, ...days.map((x) => x.total));
+  const w = 300, h = 110, gap = 2, bar = (w - gap * (days.length - 1)) / days.length;
+  const best = days.reduce((a, b) => (b.total > a.total ? b : a), days[0]);
+  return (
+    <div className="px-4 pt-4 pb-3 sm:px-5">
+      <svg viewBox={`0 0 ${w} ${h}`} className="h-32 w-full" role="img" aria-label={`Ventas diarias de los últimos 30 días. Mejor día: ${dayFmt.format(best.date)}, ${formatPrice(best.total)}.`}>
+        {days.map((x, i) => {
+          const bh = x.total ? Math.max(3, (x.total / max) * (h - 4)) : 1.5;
+          return (
+            <rect key={x.key} x={i * (bar + gap)} y={h - bh} width={bar} height={bh} rx={1.5} className={x.total ? "fill-fg/85" : "fill-fg/15"}>
+              <title>{`${dayFmt.format(x.date)}: ${formatPrice(x.total)} · ${x.count} ${x.count === 1 ? "pedido" : "pedidos"}`}</title>
+            </rect>
+          );
+        })}
+      </svg>
+      <div className="mt-1 flex justify-between text-[11px] text-muted"><span>{dayFmt.format(days[0].date)}</span><span>Hoy</span></div>
+    </div>
+  );
+}
 
 export default async function AdminHome() {
   const session = await requireStoreSession();
   const d = await getDashboard(session.storeId);
-  const max = Math.max(1, ...d.days.map((x) => x.total));
 
   const kpis = [
     { label: "Ventas de hoy", value: formatPrice(d.today.total), hint: `${d.today.count} ${d.today.count === 1 ? "pedido" : "pedidos"}` },
@@ -83,15 +104,24 @@ export default async function AdminHome() {
         </Panel>
 
         <div className="flex flex-col gap-4">
-          <Panel title="Últimos 7 días">
-            <div className="flex h-36 items-end gap-2 px-4 pt-4 pb-3 sm:px-5" role="img" aria-label={`Ventas por día: ${d.days.map((x) => `${weekdayFmt.format(x.date)} ${formatPrice(x.total)}`).join(", ")}`}>
-              {d.days.map((x) => (
-                <div key={x.key} className="flex h-full flex-1 flex-col items-center justify-end gap-1.5" title={`${formatPrice(x.total)} · ${x.count} pedidos`}>
-                  <div className="w-full rounded-t-md bg-fg/85" style={{ height: `${Math.max(x.total ? 6 : 2, (x.total / max) * 100)}%`, opacity: x.total ? 1 : 0.15 }} />
-                  <span className="text-[11px] text-muted capitalize">{weekdayFmt.format(x.date).replace(".", "")}</span>
-                </div>
-              ))}
-            </div>
+          <Panel title="Últimos 30 días" action={<span className="text-xs text-muted tabular-nums">{formatPrice(d.days.reduce((t, x) => t + x.total, 0))}</span>}>
+            <SalesChart days={d.days} />
+          </Panel>
+
+          <Panel title="Más vendidos (30 días)">
+            {d.topProducts.length ? (
+              <ol className="divide-y divide-line">
+                {d.topProducts.map((p, i) => (
+                  <li key={p.productId}>
+                    <Link href={`/admin/productos/${p.productId}`} className="flex items-center gap-3 px-4 py-2.5 hover:bg-surface sm:px-5">
+                      <span className="w-4 text-xs text-muted tabular-nums">{i + 1}</span>
+                      <span className="min-w-0 flex-1 truncate text-sm">{p.name}</span>
+                      <span className="text-right text-xs text-muted tabular-nums">{p.quantity} u.<span className="block">{formatPrice(p.total)}</span></span>
+                    </Link>
+                  </li>
+                ))}
+              </ol>
+            ) : <p className="px-5 py-6 text-sm text-muted">Sin ventas en los últimos 30 días.</p>}
           </Panel>
 
           <Panel title="Stock bajo">

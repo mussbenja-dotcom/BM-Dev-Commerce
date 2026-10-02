@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import type { ActionResult } from "./types";
+import { isAllowedImageUrl } from "@/lib/image-hosts";
 
 export const ok = (message = "Guardado", extra: Partial<ActionResult> = {}): ActionResult => ({ ok: true, message, ...extra });
 export const fail = (error: string, fieldErrors?: Record<string, string>): ActionResult => ({ ok: false, error, fieldErrors });
@@ -57,6 +58,8 @@ export function parseMoney(raw: string): number | null {
 
 const MAX_MONEY = 1_000_000_000;
 
+export const IMAGE_URL_MESSAGE = "Usá una imagen de Cloudinary o Unsplash (https://…). La subida de archivos todavía no está disponible.";
+
 /** zod helpers for string inputs coming from forms. */
 export const zf = {
   required: (max: number, msg: string) => z.string().trim().min(1, msg).max(max, `Máximo ${max} caracteres.`),
@@ -108,7 +111,7 @@ export const zf = {
       return n;
     }),
   /** Absolute http(s) URL or a local /uploads path. */
-  optionalUrl: (msg = "Ingresá una URL válida (https://…).") =>
+  optionalUrl: (msg = IMAGE_URL_MESSAGE) =>
     z
       .string()
       .trim()
@@ -128,13 +131,7 @@ export const zf = {
 };
 
 export function isImageUrl(v: string): boolean {
-  if (v.startsWith("/uploads/") && !v.includes("..")) return true;
-  try {
-    const u = new URL(v);
-    return u.protocol === "https:";
-  } catch {
-    return false;
-  }
+  return isAllowedImageUrl(v);
 }
 
 /** Refreshes the admin and (optionally) the public storefront of this store. */

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Field, Input, Select } from "@/components/ui/field";
-import { saveCouponAction, setCouponActiveAction } from "@/app/admin/promociones/actions";
+import { saveBannerAction, saveCouponAction, setCouponActiveAction } from "@/app/admin/promociones/actions";
 import { AdminForm, Feedback, Submit } from "./form-kit";
 
 export type CouponValues = {
@@ -77,6 +77,48 @@ export function CouponActiveForm({ couponId, active }: { couponId: string; activ
           <Feedback state={state} />
         </>
       )}
+    </AdminForm>
+  );
+}
+
+export type BannerValues = {
+  id?: string; placement: "hero" | "promo"; eyebrow: string; title: string; subtitle: string; ctaLabel: string; ctaHref: string;
+  imageUrl: string; mobileImageUrl: string; position: string; active: boolean;
+};
+
+export function BannerForm({ banner }: { banner: BannerValues }) {
+  const isNew = !banner.id;
+  return (
+    <AdminForm action={saveBannerAction} resetOnSuccess={isNew} className="grid gap-4 sm:grid-cols-2" label={isNew ? "Nuevo banner" : `Editar banner ${banner.title}`}>
+      {(state, pending) => {
+        const e = state?.fieldErrors ?? {};
+        return (
+          <>
+            {banner.id ? <input type="hidden" name="bannerId" value={banner.id} /> : null}
+            <Field label="Ubicación" error={e.placement}>
+              {(p) => (
+                <Select {...p} name="placement" defaultValue={banner.placement}>
+                  <option value="hero">Portada (arriba de todo)</option>
+                  <option value="promo">Promoción (bloque del inicio)</option>
+                </Select>
+              )}
+            </Field>
+            <Field label="Título" error={e.title}>{(p) => <Input {...p} name="title" maxLength={90} defaultValue={banner.title} />}</Field>
+            <Field label="Texto chico arriba (opcional)" error={e.eyebrow}>{(p) => <Input {...p} name="eyebrow" maxLength={60} defaultValue={banner.eyebrow} placeholder="Nueva colección" />}</Field>
+            <Field label="Bajada (opcional)" error={e.subtitle}>{(p) => <Input {...p} name="subtitle" maxLength={160} defaultValue={banner.subtitle} />}</Field>
+            <Field label="Texto del botón (opcional)" error={e.ctaLabel}>{(p) => <Input {...p} name="ctaLabel" maxLength={30} defaultValue={banner.ctaLabel} placeholder="Ver ofertas" />}</Field>
+            <Field label="Link del botón (opcional)" error={e.ctaHref} hint="Una sección de tu tienda, ej. /productos?oferta=1">{(p) => <Input {...p} name="ctaHref" maxLength={200} defaultValue={banner.ctaHref} />}</Field>
+            <Field label="Imagen (URL)" error={e.imageUrl} className="sm:col-span-2">{(p) => <Input {...p} name="imageUrl" maxLength={500} defaultValue={banner.imageUrl} placeholder="https://res.cloudinary.com/…" />}</Field>
+            <Field label="Imagen para celular (opcional)" error={e.mobileImageUrl} className="sm:col-span-2">{(p) => <Input {...p} name="mobileImageUrl" maxLength={500} defaultValue={banner.mobileImageUrl} />}</Field>
+            <Field label="Orden" error={e.position}>{(p) => <Input {...p} name="position" inputMode="numeric" defaultValue={banner.position} />}</Field>
+            <label className="flex items-center gap-2 self-end pb-3 text-sm"><input type="checkbox" name="active" defaultChecked={banner.active} className="size-4 accent-current" /> Visible</label>
+            <div className="flex items-center gap-3 sm:col-span-2">
+              <Submit pending={pending} size="sm" pendingLabel="Guardando…">{isNew ? "Crear banner" : "Guardar banner"}</Submit>
+              <Feedback state={state} />
+            </div>
+          </>
+        );
+      }}
     </AdminForm>
   );
 }

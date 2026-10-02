@@ -2,27 +2,38 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Truck, CreditCard, MessageCircle } from "lucide-react";
-import { getStoreBySlug, getStoreBase } from "@/lib/store/resolve";
+import type { Metadata } from "next";
+import { getStoreBySlug, getStoreBase, getStoreOrigin } from "@/lib/store/resolve";
+import { storeMetadata } from "@/lib/seo";
+import { JsonLd } from "@/components/store/json-ld";
 import { getHomeData, type ProductCardData } from "@/lib/services/catalog";
 import { ProductCard } from "@/components/store/product-card";
 import { buttonClasses } from "@/components/ui/button";
 import { formatPrice } from "@/lib/money";
 
-export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const store = await getStoreBySlug((await params).slug);
-  return { title: store?.settings?.seoTitle ?? store?.name, description: store?.settings?.seoDescription ?? store?.settings?.description };
+  if (!store) return { title: "Tienda no encontrada", robots: { index: false } };
+  return storeMetadata(store, await getStoreOrigin(store), { path: "" });
 }
 
 export default async function StoreHome({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const store = await getStoreBySlug(slug);
   if (!store?.theme || !store.settings) notFound();
-  const [data, base] = await Promise.all([getHomeData(store.id), getStoreBase(slug)]);
+  const [data, base, origin] = await Promise.all([getHomeData(store.id), getStoreBase(slug), getStoreOrigin(store)]);
+  const st = store.settings;
+  const organization = {
+    "@context": "https://schema.org", "@type": "Organization", name: store.name, url: origin,
+    ...(st.logoUrl ? { logo: st.logoUrl } : {}),
+    ...(st.email ? { email: st.email } : {}),
+    sameAs: [st.instagram && `https://www.instagram.com/${st.instagram.replace(/^@/, "")}`, st.facebook && `https://www.facebook.com/${st.facebook}`, st.tiktok && `https://www.tiktok.com/@${st.tiktok.replace(/^@/, "")}`].filter(Boolean),
+  };
   const sections = Array.isArray(store.theme.homeSections) ? store.theme.homeSections : ["hero", "featured"];
   const collections: Record<string, { title: string; products: ProductCardData[]; query: string }> = { featured: { title: "Nuestros elegidos", products: data.featured, query: "" }, new: { title: "Recién llegados", products: data.newest, query: "?orden=nuevos" }, offers: { title: "Especiales para vos", products: data.offers, query: "?oferta=1" }, bestsellers: { title: "Los más queridos", products: data.bestsellers, query: "?orden=vendidos" } };
   const href = (path: string | null) => `${base}${path?.startsWith("/") && !path.startsWith("//") ? path : "/productos"}`;
   const hero = data.heroBanners[0];
-  return <>{sections.map((section, index) => {
+  return <><JsonLd data={organization} />{sections.map((section, index) => {
     const key = `${section}-${index}`;
     if (section === "hero") return hero ? <section key={key} className={`relative overflow-hidden bg-surface ${store.theme!.heroLayout === "full" ? "min-h-[65vh] text-white" : "grid lg:min-h-[560px] lg:grid-cols-2"}`}>
       <div className={store.theme!.heroLayout === "full" ? "absolute inset-0" : "relative order-last min-h-80 lg:order-none"}><Image src={hero.imageUrl} alt={hero.title} fill quality={80} preload sizes="(max-width: 1024px) 100vw, 70vw" className="object-cover" />{store.theme!.heroLayout === "full" && <div className="absolute inset-0 bg-gradient-to-r from-black/65 via-black/25 to-transparent" />}</div>

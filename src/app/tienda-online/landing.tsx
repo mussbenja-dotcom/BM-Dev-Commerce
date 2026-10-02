@@ -3,15 +3,17 @@ import { connection } from "next/server";
 import { bmdevWhatsappUrl } from "@/lib/bmdev";
 import { getLandingDemos, type LandingDemo } from "@/lib/services/landing";
 import { LandingPage } from "@/components/landing/landing-page";
+import { JsonLd } from "@/components/store/json-ld";
 
 const title = "Tiendas online personalizadas para tu negocio | BM Dev E-commerce";
-const description = "Creamos tiendas online personalizadas para emprendimientos y comercios: tu marca, tu dominio, tus productos y tu propio panel. Mercado Pago, transferencia y WhatsApp. Sin comisión de BM Dev por venta.";
+const description = "Creamos tu tienda online personalizada en Argentina: tu marca, tu dominio, tus productos y tu propio panel. Mercado Pago, transferencia y WhatsApp. Sin comisión de BM Dev por venta.";
 
 export const landingMetadata: Metadata = {
   title: { absolute: title },
   description,
   alternates: { canonical: "/tienda-online" },
-  openGraph: { type: "website", url: "/tienda-online", siteName: "BM Dev E-commerce", locale: "es_AR", title, description },
+  openGraph: { type: "website", url: "/tienda-online", siteName: "BM Dev E-commerce", locale: "es_AR", title, description, images: [{ url: "/tienda-online/opengraph-image", width: 1200, height: 630, alt: "BM Dev E-commerce" }] },
+  twitter: { card: "summary_large_image", title, description, images: ["/tienda-online/opengraph-image"] },
 };
 
 /** Shared by /tienda-online and the platform home (/). */
@@ -24,5 +26,19 @@ export async function Landing() {
     // The landing must keep converting even if the demos cannot be loaded.
     console.error("[landing] could not load demos", error);
   }
-  return <LandingPage demos={demos} whatsappUrl={bmdevWhatsappUrl()} demoLoginEnabled={process.env.DEMO_LOGIN_ENABLED === "true"} />;
+  const origin = (process.env.APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
+  const structured = [
+    { "@context": "https://schema.org", "@type": "Organization", name: "BM Dev", url: "https://bmdev.solutions" },
+    {
+      "@context": "https://schema.org", "@type": "Service", name: "BM Dev E-commerce", serviceType: "Desarrollo de tiendas online personalizadas",
+      url: `${origin}/tienda-online`, areaServed: { "@type": "Country", name: "Argentina" }, provider: { "@type": "Organization", name: "BM Dev", url: "https://bmdev.solutions" },
+      description,
+    },
+  ];
+  return (
+    <>
+      <JsonLd data={structured} />
+      <LandingPage demos={demos} whatsappUrl={bmdevWhatsappUrl()} demoLoginEnabled={process.env.DEMO_LOGIN_ENABLED === "true"} />
+    </>
+  );
 }

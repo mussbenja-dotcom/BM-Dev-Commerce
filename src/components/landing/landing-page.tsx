@@ -105,7 +105,7 @@ export function LandingPage({ demos, whatsappUrl, demoLoginEnabled }: { demos: L
           <nav aria-label="Secciones" className="hidden items-center gap-6 text-sm text-muted md:flex">
             <a href="#incluye" className="hover:text-fg">Qué incluye</a>
             <a href="#como-funciona" className="hover:text-fg">Cómo funciona</a>
-            <a href="#demo" className="hover:text-fg">Demo</a>
+            <Link href="/demo" className="hover:text-fg">Demo</Link>
             <Link href="/login" className="hover:text-fg">Ingresar</Link>
           </nav>
           <a href="#solicitud" className={buttonClasses("primary", "sm", "px-4")}>Quiero mi tienda</a>
@@ -126,7 +126,7 @@ export function LandingPage({ demos, whatsappUrl, demoLoginEnabled }: { demos: L
               </p>
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                 <a href="#solicitud" className={buttonClasses("primary", "lg")}>Quiero mi tienda online <ArrowRight size={18} aria-hidden /></a>
-                <a href="#demo" className={buttonClasses("secondary", "lg")}>Ver demo</a>
+                <Link href="/demo" className={buttonClasses("secondary", "lg")}>Ver demo</Link>
               </div>
               <ul className="mt-8 grid gap-2 text-sm text-fg sm:grid-cols-2">
                 {["Sin comisión de BM Dev por venta", "Tu dominio y tu marca", "Mercado Pago, transferencia y WhatsApp", "Panel para manejar tus pedidos"].map((t) => (
@@ -241,7 +241,7 @@ export function LandingPage({ demos, whatsappUrl, demoLoginEnabled }: { demos: L
                     <li key={d.slug}><Link href={`/s/${d.slug}`} className="flex items-center justify-between rounded-lg border border-line bg-bg px-3 py-2.5 text-sm hover:border-fg/40">{d.name} <span className="text-muted">{d.industry}</span></Link></li>
                   ))}
                 </ul>
-                <Link href={`/s/${hero.slug}`} className={buttonClasses("primary", "md", "mt-2")}>Ver demo</Link>
+                <Link href="/demo" className={buttonClasses("primary", "md", "mt-2")}>Ver demo con recorrido</Link>
                 {canDemoLogin ? (
                   <form action={demoLoginAction}>
                     <input type="hidden" name="slug" value="alma" />

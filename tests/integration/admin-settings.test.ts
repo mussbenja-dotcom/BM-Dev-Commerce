@@ -44,7 +44,15 @@ describe("admin settings", () => {
     await updatePayments(plain, payments());
     expect(await db.storeSettings.findUniqueOrThrow({ where: { storeId: plain.storeId } })).toMatchObject({ enableTransfer: true, transferDiscountPct: 10, bankCbu: "2850590900000940401231" });
     const demo = await actor("demo", { isDemo: true });
-    await expect(updatePayments(demo, payments({ enableTransfer: false, enableMercadoPago: true }))).resolves.toEqual({ mercadoPagoAvailable: true });
+    await expect(updatePayments(demo, payments({ enableTransfer: false, enableMercadoPago: true }))).resolves.toEqual({ mercadoPagoAvailable: true, bankLocked: false });
+  });
+
+  it("keeps bank details unchanged for demo sessions", async () => {
+    const demo = await actor("demo-bank", { isDemo: true });
+    await db.storeSettings.update({ where: { storeId: demo.storeId }, data: { bankHolder: "Demo S.R.L.", bankAlias: "demo.alias" } });
+    const r = await updatePayments({ ...demo, isDemo: true }, payments({ bankHolder: "Estafador", bankAlias: "robo.alias", bankCbu: null, transferDiscountPct: 15 }));
+    expect(r.bankLocked).toBe(true);
+    expect(await db.storeSettings.findUniqueOrThrow({ where: { storeId: demo.storeId } })).toMatchObject({ bankHolder: "Demo S.R.L.", bankAlias: "demo.alias", transferDiscountPct: 15 });
   });
 
   it("writes only the session store's settings and shipping methods", async () => {

@@ -3,9 +3,10 @@
 import { useState, type ReactNode } from "react";
 import { Field, Input, Select, Textarea } from "@/components/ui/field";
 import {
-  saveContactAction, saveFreeShippingAction, savePaymentsAction, savePoliciesAction, saveShippingMethodAction, saveStoreInfoAction,
+  saveContactAction, saveFreeShippingAction, savePaymentsAction, savePoliciesAction, saveShippingMethodAction, saveStoreInfoAction, saveThemeAction,
 } from "@/app/admin/configuracion/actions";
 import { AdminForm, Feedback, Submit, type AdminAction } from "./form-kit";
+import { HEX_COLOR, readableOn } from "@/lib/color";
 
 type Values = Record<string, string>;
 
@@ -101,7 +102,8 @@ export function ContactForm({ values, provinces }: { values: Values; provinces: 
   );
 }
 
-export function PaymentsForm({ values, flags, mercadoPago }: {
+export function PaymentsForm({ values, flags, mercadoPago, bankLocked = false }: {
+  bankLocked?: boolean;
   values: Values;
   flags: { enableMercadoPago: boolean; enableTransfer: boolean; enableCash: boolean; enableWhatsappOrder: boolean };
   mercadoPago: { available: boolean; demo: boolean };
@@ -120,11 +122,14 @@ export function PaymentsForm({ values, flags, mercadoPago }: {
           <Text name="transferDiscountPct" label="Descuento por transferencia (%)" values={values} errors={e} max={2} />
           <Text name="maxInstallments" label="Cuotas que mostrás" values={values} errors={e} max={2} hint="Solo informativo en la ficha del producto." />
           <h3 className="pt-2 text-sm font-semibold sm:col-span-2">Datos para transferencias</h3>
-          <Text name="bankHolder" label="Titular" values={values} errors={e} max={80} />
-          <Text name="bankName" label="Banco o billetera (opcional)" values={values} errors={e} max={60} />
-          <Text name="bankAlias" label="Alias" values={values} errors={e} max={20} />
-          <Text name="bankCbu" label="CBU / CVU" values={values} errors={e} max={30} />
-          <Text name="bankCuit" label="CUIT (opcional)" values={values} errors={e} max={20} />
+          {bankLocked ? <p className="-mt-2 text-xs text-amber-800 sm:col-span-2">Modo demo: los datos bancarios son de ejemplo y no se pueden cambiar.</p> : null}
+          <fieldset disabled={bankLocked} className="contents">
+            <Text name="bankHolder" label="Titular" values={values} errors={e} max={80} />
+            <Text name="bankName" label="Banco o billetera (opcional)" values={values} errors={e} max={60} />
+            <Text name="bankAlias" label="Alias" values={values} errors={e} max={20} />
+            <Text name="bankCbu" label="CBU / CVU" values={values} errors={e} max={30} />
+            <Text name="bankCuit" label="CUIT (opcional)" values={values} errors={e} max={20} />
+          </fieldset>
         </>
       )}
     </SectionForm>
@@ -206,14 +211,107 @@ export function ShippingMethodForm({ method, provinces }: { method: ShippingValu
 }
 
 export function PoliciesForm({ values }: { values: Values }) {
-  const items = [["shippingPolicy", "Envíos"], ["returnsPolicy", "Cambios y devoluciones"], ["privacyPolicy", "Privacidad"]] as const;
+  const items = [["shippingPolicy", "Envíos"], ["returnsPolicy", "Cambios y devoluciones"], ["privacyPolicy", "Privacidad"], ["termsPolicy", "Términos y condiciones"]] as const;
   return (
     <SectionForm action={savePoliciesAction} label="Políticas" submit="Guardar políticas" className="grid gap-4">
       {(e) => items.map(([name, label]) => (
         <Field key={name} label={label} error={e[name]} hint="Se publica en el pie de tu tienda.">
-          {(p) => <Textarea {...p} name={name} rows={4} maxLength={5000} defaultValue={values[name] ?? ""} />}
+          {(p) => <Textarea {...p} name={name} rows={4} maxLength={name === "termsPolicy" ? 10000 : 5000} defaultValue={values[name] ?? ""} />}
         </Field>
       ))}
     </SectionForm>
+  );
+}
+
+const SECTION_LABEL: Record<string, string> = {
+  hero: "Portada", categories: "Categorías", featured: "Destacados", new: "Novedades", promo: "Banners de promoción",
+  offers: "Ofertas", bestsellers: "Más vendidos", benefits: "Beneficios (envío, cuotas, cambios)", instagram: "Instagram",
+};
+
+export type ThemeValues = {
+  template: string; primaryColor: string; accentColor: string; backgroundColor: string; textColor: string;
+  headingFont: string; bodyFont: string; radius: string; heroLayout: string; cardStyle: string; headingCase: string; homeSections: string[];
+};
+
+export function ThemeForm({ values, templates, fonts, sections, storeUrl }: {
+  values: ThemeValues; templates: { key: string; label: string; description: string }[]; fonts: Record<string, string>; sections: readonly string[]; storeUrl: string;
+}) {
+  const [colors, setColors] = useState({ primaryColor: values.primaryColor, accentColor: values.accentColor, backgroundColor: values.backgroundColor, textColor: values.textColor });
+  const ordered = [...values.homeSections, ...sections.filter((s) => !values.homeSections.includes(s))];
+  const color = (name: keyof typeof colors, label: string, e: Record<string, string>) => (
+    <Field label={label} error={e[name]}>
+      {(p) => (
+        <span className="flex items-center gap-2">
+          <input type="color" aria-label={`${label} (selector)`} value={colors[name]} onChange={(ev) => setColors({ ...colors, [name]: ev.target.value })} className="h-11 w-12 shrink-0 cursor-pointer rounded-theme border border-line bg-bg p-1" />
+          <Input {...p} name={name} value={colors[name]} maxLength={7} onChange={(ev) => setColors({ ...colors, [name]: ev.target.value })} className="font-mono" />
+        </span>
+      )}
+    </Field>
+  );
+  return (
+    <AdminForm action={saveThemeAction} label="Apariencia" className="flex flex-col gap-5">
+      {(state, pending) => {
+        const e = state?.fieldErrors ?? {};
+        return (
+          <>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Plantilla" error={e.template}>
+                {(p) => (
+                  <Select {...p} name="template" defaultValue={values.template}>
+                    {templates.map((t) => <option key={t.key} value={t.key}>{t.label} — {t.description}</option>)}
+                  </Select>
+                )}
+              </Field>
+              <label className="flex items-start gap-2.5 self-end pb-2 text-sm">
+                <input type="checkbox" name="applyTemplate" className="mt-0.5 size-4 accent-current" />
+                <span>Usar los colores y tipografías de la plantilla<span className="block text-xs text-muted">Reemplaza los colores de abajo.</span></span>
+              </label>
+            </div>
+            <fieldset className="grid gap-4 sm:grid-cols-2">
+              <legend className="mb-3 text-sm font-semibold">Colores</legend>
+              {color("primaryColor", "Principal (botones)", e)}
+              {color("accentColor", "Acento", e)}
+              {color("backgroundColor", "Fondo", e)}
+              {color("textColor", "Texto", e)}
+              <div className="flex flex-wrap items-center gap-3 rounded-theme border border-line p-3 text-sm sm:col-span-2" style={{ background: colors.backgroundColor, color: colors.textColor }} aria-hidden>
+                <span>Vista previa del texto</span>
+                <span className="rounded-theme px-3 py-1.5" style={{ background: colors.primaryColor, color: HEX_COLOR.test(colors.primaryColor) ? readableOn(colors.primaryColor) : "#fff" }}>Agregar al carrito</span>
+                <span style={{ color: colors.accentColor }}>Oferta</span>
+              </div>
+            </fieldset>
+            <fieldset className="grid gap-4 sm:grid-cols-2">
+              <legend className="mb-3 text-sm font-semibold">Tipografías y estilo</legend>
+              <Field label="Títulos" error={e.headingFont}>{(p) => <Select {...p} name="headingFont" defaultValue={values.headingFont}>{Object.entries(fonts).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</Select>}</Field>
+              <Field label="Textos" error={e.bodyFont}>{(p) => <Select {...p} name="bodyFont" defaultValue={values.bodyFont}>{Object.entries(fonts).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</Select>}</Field>
+              <Field label="Títulos en mayúscula">{(p) => <Select {...p} name="headingCase" defaultValue={values.headingCase}><option value="normal">No</option><option value="upper">Sí</option></Select>}</Field>
+              <Field label="Bordes">{(p) => <Select {...p} name="radius" defaultValue={values.radius}><option value="none">Rectos</option><option value="sm">Apenas redondeados</option><option value="md">Redondeados</option><option value="lg">Muy redondeados</option></Select>}</Field>
+              <Field label="Portada">{(p) => <Select {...p} name="heroLayout" defaultValue={values.heroLayout}><option value="full">Imagen a pantalla completa</option><option value="split">Imagen y texto lado a lado</option><option value="minimal">Simple</option></Select>}</Field>
+              <Field label="Fotos de producto">{(p) => <Select {...p} name="cardStyle" defaultValue={values.cardStyle}><option value="portrait">Verticales</option><option value="square">Cuadradas</option></Select>}</Field>
+            </fieldset>
+            <fieldset>
+              <legend className="mb-1 text-sm font-semibold">Secciones del inicio</legend>
+              <p className="mb-3 text-xs text-muted">Tildá las que querés mostrar y numeralas en el orden en que aparecen.</p>
+              {e.homeSections ? <p className="mb-2 text-[13px] text-red-600" role="alert">{e.homeSections}</p> : null}
+              <ul className="grid gap-2 sm:grid-cols-2">
+                {ordered.map((s) => {
+                  const i = values.homeSections.indexOf(s);
+                  return (
+                    <li key={s} className="flex items-center gap-2 rounded-theme border border-line px-3 py-2 text-sm">
+                      <label className="flex flex-1 items-center gap-2"><input type="checkbox" name={`section_${s}`} defaultChecked={i >= 0} className="size-4 accent-current" />{SECTION_LABEL[s] ?? s}</label>
+                      <label className="flex items-center gap-1 text-xs text-muted">Orden<span className="w-14"><Input name={`order_${s}`} inputMode="numeric" defaultValue={String(i >= 0 ? i + 1 : ordered.indexOf(s) + 1)} className="h-8 text-sm" aria-label={`Orden de ${SECTION_LABEL[s] ?? s}`} /></span></label>
+                    </li>
+                  );
+                })}
+              </ul>
+            </fieldset>
+            <div className="flex flex-wrap items-center gap-3">
+              <Submit pending={pending} size="sm" pendingLabel="Guardando…">Guardar apariencia</Submit>
+              <a href={storeUrl} target="_blank" rel="noopener noreferrer" className="text-sm underline">Ver mi tienda</a>
+              <Feedback state={state} />
+            </div>
+          </>
+        );
+      }}
+    </AdminForm>
   );
 }
