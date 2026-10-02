@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Field, Input, Select, Textarea } from "@/components/ui/field";
 import { adjustStockAction, duplicateProductAction, saveCategoryAction, saveProductAction, saveVariantAction, setProductActiveAction } from "@/app/admin/productos/actions";
 import { AdminForm, Feedback, Submit } from "./form-kit";
+import { UploadButton } from "./upload-button";
 
 type Category = { id: string; name: string };
 export type ProductFormValues = {
@@ -89,7 +90,8 @@ export function ProductForm({ product, categories }: { product: ProductFormValue
 
             <section className="grid gap-4 rounded-xl border border-line bg-bg p-4 sm:p-5">
               <h2 className="text-sm font-semibold">Imágenes</h2>
-              <Field label="URLs de imágenes" error={e.images ?? Object.entries(e).find(([k]) => k.startsWith("images."))?.[1]} hint="Una por línea, hasta 8. La primera es la principal.">
+              <UploadButton target="images" mode="append" />
+              <Field label="Fotos (una por línea)" error={e.images ?? Object.entries(e).find(([k]) => k.startsWith("images."))?.[1]} hint="Hasta 8. La primera es la principal. También podés pegar links de Cloudinary o Unsplash.">
                 {(p) => <Textarea {...p} name="images" rows={4} defaultValue={product.images} placeholder="https://…" className="font-mono text-[13px]" />}
               </Field>
             </section>
@@ -251,9 +253,12 @@ export function CategoryForm({ category }: { category: CategoryValues }) {
             <Field label="Nombre" error={e.name}>
               {(p) => <Input {...p} name="name" required maxLength={60} defaultValue={category.name} />}
             </Field>
-            <Field label="Imagen (URL, opcional)" error={e.imageUrl}>
-              {(p) => <Input {...p} name="imageUrl" maxLength={500} defaultValue={category.imageUrl} placeholder="https://…" />}
-            </Field>
+            <div className="flex flex-col gap-1.5">
+              <Field label="Imagen (opcional)" error={e.imageUrl}>
+                {(p) => <Input {...p} name="imageUrl" maxLength={500} defaultValue={category.imageUrl} placeholder="https://…" />}
+              </Field>
+              <UploadButton target="imageUrl" />
+            </div>
             <Field label="Orden" error={e.position}>
               {(p) => <Input {...p} name="position" inputMode="numeric" defaultValue={category.position} />}
             </Field>

@@ -12,7 +12,7 @@
 | Mercado Pago | **DEMO** funcionando (simulador aprobado / pendiente / rechazado, webhook que re-consulta e idempotente). Cobro real **BLOQUEADO**: faltan credenciales SANDBOX y HTTPS público. |
 | Storefront (`/s/[slug]`) | TERMINADO: home por `homeSections`, catálogo con filtros y orden (incl. ofertas), producto, carrito, cupones, envío, checkout, confirmación, políticas (incl. términos), 404. |
 | Pedidos + WhatsApp | TERMINADO (el pedido se registra antes de abrir `wa.me`). |
-| Admin (`/admin`) | TERMINADO: dashboard 30 días y más vendidos, pedidos, productos (duplicar), categorías, stock, promociones (cupones y banners), clientes, configuración (tienda, apariencia, contacto, pagos, envíos, políticas, dominio). Falta subida de archivos. |
+| Admin (`/admin`) | TERMINADO: dashboard 30 días y más vendidos, pedidos, productos (duplicar), categorías, stock, promociones (cupones y banners), clientes, configuración (tienda, apariencia, contacto, pagos, envíos, políticas, dominio), subida de fotos. |
 | Modo demo / soporte | TERMINADO (banner MODO DEMO, datos bancarios bloqueados en demo; banner y salida de soporte). |
 | Demo comercial (`/demo`) | TERMINADO, con recorrido de 19 pasos probado de punta a punta. |
 | Superadmin | TERMINADO (falta cargar credenciales de MP por tienda y resetear demos). |
@@ -28,14 +28,14 @@
 | WhatsApp (pedidos, consultas, leads) | FUNCIONANDO (links `wa.me`, sin API) |
 | Transferencia / efectivo | FUNCIONANDO |
 | Email | PENDIENTE |
-| Subida de imágenes (Cloudinary / local) | PENDIENTE (hoy URLs de Unsplash/Cloudinary) |
+| Subida de imágenes | FUNCIONANDO en disco local (`UPLOAD_DIR`). Cloudinary implementado (subida firmada) pero **sin probar**: la red del contenedor no llega a Cloudinary |
 | Dominio propio | PARCIAL: mapeo por host y sitemap por dominio probados con header `Host`; falta probar DNS + HTTPS reales |
 | Envíos por API | PENDIENTE (P3) |
 
 ## Próximo paso exacto
 
-1. **En tu máquina:** `git pull` en `main`, `npm run db:deploy` (migraciones nuevas: `*_lead_notes_store`, `*_terms_policy`) y opcional `npm run db:seed` (solo tiendas demo: términos por defecto, CBU/CUIT válidos, superadmin si está en `.env`).
-2. **Imágenes (P2, desbloquea a los comercios):** crear `src/app/api/admin/uploads/route.ts` (sesión de tienda, `isSameOrigin`, rate limit, tipos jpeg/png/webp, máx. 4 MB, sin SVG; bloqueado en `session.isDemo`) que guarde en Cloudinary si están `CLOUDINARY_*` o en `public/uploads/<storeId>/`; agregar un botón "Subir" en `ProductForm`, logo y banners que complete la URL. `src/lib/image-hosts.ts` ya acepta `/uploads/`.
+1. **En tu máquina:** `git pull` en `main`, `npm run db:deploy` (migraciones `*_lead_notes_store`, `*_terms_policy`) y opcional `npm run db:seed`.
+2. **Probar Cloudinary** con tus `CLOUDINARY_*` en `.env`: subir una foto desde Productos y verificar que la URL guardada sea `https://res.cloudinary.com/...`. En hosting sin disco persistente (Vercel, Render free) **Cloudinary es obligatorio**: el disco local se pierde en cada deploy.
 3. **Mercado Pago real (P0 bloqueado):** en `/superadmin/tiendas/[id]` agregar carga de Public Key y Access Token (cifrar con `encryptSecret`, nunca devolverlos), selector SANDBOX/PRODUCTION; probar con credenciales de prueba y una URL HTTPS pública para el webhook.
 4. **Reset de demos desde `/superadmin`** (P2): reutilizar la lógica de `prisma/seed.ts` para una sola tienda demo.
 
@@ -46,6 +46,12 @@
 - Las e2e/integración de esta sesión corrieron contra un PostgreSQL 16 local del contenedor (no PGlite), con `DATABASE_POOL_MAX=5`.
 
 ## Hitos implementados
+
+### Subida de fotos (esta sesión)
+
+- `POST /api/admin/uploads`: sesión de tienda (el `storeId` sale de la sesión), `isSameOrigin`, rate limit 30 cada 10 min por usuario, máx. 4 MB, **tipo por firma de bytes** (JPEG, PNG, WebP; SVG/HTML/GIF rechazados aunque digan `.png`), bloqueado en sesiones demo, audit `upload.image`.
+- Almacenamiento: Cloudinary (subida firmada, carpeta `bmdev/<storeId>`) si están las tres `CLOUDINARY_*`; si no, disco en `UPLOAD_DIR` (default `./storage/uploads`, en `.gitignore`). Los archivos locales se sirven por `GET /uploads/<storeId>/<archivo>` (nombres aleatorios validados por regex, tipo detectado de nuevo, `immutable`, CSP `sandbox`) porque Next solo sirve de `public/` lo que existía al arrancar.
+- Botón "Subir foto" (`src/components/admin/upload-button.tsx`) en fotos de producto (agrega una línea), logo, categorías y banners. `isAllowedImageUrl` solo acepta rutas `/uploads/` generadas.
 
 ### SEO, tests de precios/WhatsApp y orden "ofertas" (esta sesión)
 
@@ -200,16 +206,20 @@ Las 3, 4 y 5 **faltan aplicarse en tus bases locales** (`npm run db:deploy`). `n
 
 ## Variables de entorno (solo nombres)
 
-`DATABASE_URL`, `DATABASE_POOL_MAX`, `E2E_DATABASE_URL`, `APP_URL`, `PLATFORM_HOSTS`, `ENCRYPTION_KEY`, `DEMO_LOGIN_ENABLED`, `SUPERADMIN_EMAIL`, `SUPERADMIN_PASSWORD`, `DEMO_ADMIN_PASSWORD`, `BMDEV_WHATSAPP`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `PLAYWRIGHT_CHROMIUM_PATH` (opcional, solo e2e).
+`DATABASE_URL`, `DATABASE_POOL_MAX`, `E2E_DATABASE_URL`, `APP_URL`, `PLATFORM_HOSTS`, `ENCRYPTION_KEY`, `DEMO_LOGIN_ENABLED`, `SUPERADMIN_EMAIL`, `SUPERADMIN_PASSWORD`, `DEMO_ADMIN_PASSWORD`, `BMDEV_WHATSAPP`, `UPLOAD_DIR`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `PLAYWRIGHT_CHROMIUM_PATH` (opcional, solo e2e).
 
-## Verificaciones (último hito: SEO y tests)
+## Verificaciones (último hito: subida de fotos)
 
 - `npx tsc --noEmit` → OK
 - `npx eslint src` → OK
-- `npm test` → OK (87)
-- `npm run test:integration` → OK (32)
-- `npm run build` → OK
-- `npm run test:e2e` → OK (23 de 23; incluye `seo.spec.ts`: robots/sitemap por host, canonical, OG, JSON-LD seguro, demo `noindex`, imagen OG)
+- `npm test` → OK (90)
+- `npm run test:integration` → OK (35; incluye `uploads.test.ts`: guardado y lectura, SVG/tamaño/storeId inválido rechazados, sin lectura fuera de la carpeta)
+- `npm run build` → OK, sin warnings
+- `npm run test:e2e` → OK (24 de 24; incluye subida de PNG desde la ficha de producto servida en la tienda, SVG rechazado, origen ajeno 403, demo 403)
+
+## Verificaciones (hito SEO y tests)
+
+- tsc, eslint, `npm test` 87, integración 32, build y e2e 23 de 23: OK.
 
 ## Verificaciones (hito /demo)
 
@@ -297,7 +307,6 @@ Las 3, 4 y 5 **faltan aplicarse en tus bases locales** (`npm run db:deploy`). `n
 
 ### P2
 
-- Subida de imágenes validada (Cloudinary / local) para productos, logo, categorías y banners.
 - Reset de tiendas demo desde superadmin (los visitantes del panel demo pueden cambiar textos y apariencia).
 - Mensaje de confirmación visible tras cancelar un pedido (hoy se ve el estado "Cancelado", el aviso desaparece con el formulario).
 

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Field, Input, Select } from "@/components/ui/field";
 import { saveBannerAction, saveCouponAction, setCouponActiveAction } from "@/app/admin/promociones/actions";
 import { AdminForm, Feedback, Submit } from "./form-kit";
+import { UploadButton } from "./upload-button";
 
 export type CouponValues = {
   id?: string; code: string; description: string; type: "PERCENT" | "FIXED" | "FREE_SHIPPING"; value: string;
@@ -108,7 +109,10 @@ export function BannerForm({ banner }: { banner: BannerValues }) {
             <Field label="Bajada (opcional)" error={e.subtitle}>{(p) => <Input {...p} name="subtitle" maxLength={160} defaultValue={banner.subtitle} />}</Field>
             <Field label="Texto del botón (opcional)" error={e.ctaLabel}>{(p) => <Input {...p} name="ctaLabel" maxLength={30} defaultValue={banner.ctaLabel} placeholder="Ver ofertas" />}</Field>
             <Field label="Link del botón (opcional)" error={e.ctaHref} hint="Una sección de tu tienda, ej. /productos?oferta=1">{(p) => <Input {...p} name="ctaHref" maxLength={200} defaultValue={banner.ctaHref} />}</Field>
-            <Field label="Imagen (URL)" error={e.imageUrl} className="sm:col-span-2">{(p) => <Input {...p} name="imageUrl" maxLength={500} defaultValue={banner.imageUrl} placeholder="https://res.cloudinary.com/…" />}</Field>
+            <div className="flex flex-col gap-1.5 sm:col-span-2">
+              <Field label="Imagen" error={e.imageUrl}>{(p) => <Input {...p} name="imageUrl" maxLength={500} defaultValue={banner.imageUrl} placeholder="https://res.cloudinary.com/…" />}</Field>
+              <UploadButton target="imageUrl" />
+            </div>
             <Field label="Imagen para celular (opcional)" error={e.mobileImageUrl} className="sm:col-span-2">{(p) => <Input {...p} name="mobileImageUrl" maxLength={500} defaultValue={banner.mobileImageUrl} />}</Field>
             <Field label="Orden" error={e.position}>{(p) => <Input {...p} name="position" inputMode="numeric" defaultValue={banner.position} />}</Field>
             <label className="flex items-center gap-2 self-end pb-3 text-sm"><input type="checkbox" name="active" defaultChecked={banner.active} className="size-4 accent-current" /> Visible</label>
