@@ -2,7 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { findSlugByHost, isPlatformHost, STORE_HOST_HEADER } from "@/lib/store/resolve";
 
 // Paths that always belong to the platform, never to a storefront rewrite.
-const PLATFORM_PREFIXES = ["/_next", "/api", "/admin", "/superadmin", "/login", "/uploads", "/s/"];
+// robots.txt and sitemap.xml are served by the app for every host: they detect the store by Host.
+const PLATFORM_PREFIXES = ["/_next", "/api", "/admin", "/superadmin", "/login", "/uploads", "/s/", "/robots.txt", "/sitemap.xml"];
 
 export async function proxy(request: NextRequest) {
   const host = request.headers.get("host") ?? "";

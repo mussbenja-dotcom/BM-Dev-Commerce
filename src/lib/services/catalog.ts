@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { db } from "@/lib/db";
 import type { Prisma } from "@/generated/prisma/client";
 
@@ -31,6 +32,7 @@ export const SORT_OPTIONS = {
   "precio-asc": "Menor precio",
   "precio-desc": "Mayor precio",
   vendidos: "Más vendidos",
+  ofertas: "Ofertas primero",
 } as const;
 export type SortKey = keyof typeof SORT_OPTIONS;
 
@@ -97,6 +99,9 @@ function buildOrder(sort: SortKey | undefined): Prisma.ProductOrderByWithRelatio
       return [{ price: "desc" }];
     case "vendidos":
       return [{ soldCount: "desc" }];
+    case "ofertas":
+      // Products with a previous price (on sale) first, then the most sold.
+      return [{ compareAtPrice: { sort: "desc", nulls: "last" } }, { soldCount: "desc" }];
     default:
       return [{ featured: "desc" }, { soldCount: "desc" }, { createdAt: "desc" }];
   }
@@ -159,7 +164,7 @@ export function sortSizes(sizes: string[]) {
   });
 }
 
-export async function getProductBySlug(storeId: string, slug: string) {
+export const getProductBySlug = cache(async (storeId: string, slug: string) => {
   return db.product.findFirst({
     where: { storeId, slug, active: true },
     include: {
@@ -168,7 +173,7 @@ export async function getProductBySlug(storeId: string, slug: string) {
       category: true,
     },
   });
-}
+});
 
 export async function getRelatedProducts(storeId: string, productId: string, categoryId: string | null, take = 4) {
   const sameCategory = categoryId

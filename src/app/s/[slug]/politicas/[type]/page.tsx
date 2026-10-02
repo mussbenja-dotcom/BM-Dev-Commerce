@@ -1,5 +1,16 @@
 import { notFound } from "next/navigation";
-import { getStoreBySlug } from "@/lib/store/resolve";
+import type { Metadata } from "next";
+import { getStoreBySlug, getStoreOrigin } from "@/lib/store/resolve";
+import { storeMetadata } from "@/lib/seo";
+
+const TITLES: Record<string, string> = { envios: "Envíos y retiros", cambios: "Cambios y devoluciones", privacidad: "Privacidad", terminos: "Términos y condiciones" };
+
+export async function generateMetadata({ params }: { params: Promise<{ slug: string; type: string }> }): Promise<Metadata> {
+  const { slug, type } = await params;
+  const store = await getStoreBySlug(slug);
+  if (!store || !TITLES[type]) return { robots: { index: false } };
+  return storeMetadata(store, await getStoreOrigin(store), { path: `/politicas/${type}`, title: TITLES[type] });
+}
 
 export default async function PolicyPage({ params }: { params: Promise<{ slug: string; type: string }> }) {
   const { slug, type } = await params;
