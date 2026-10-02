@@ -2,7 +2,7 @@
 
 - **Fecha:** 2026-10-01
 - **Branch:** `main`
-- **Último commit de código:** `1072e77` feat: add login, store APIs, cart state and UI primitives (luego se agrega este HANDOFF en un commit `docs:`)
+- **Último hito:** servicio Mercado Pago y webhook con pruebas unitarias y de integración (commit `feat: implement tenant-scoped Mercado Pago payments and webhook`).
 - **Push:** realizado a `origin/main` (https://github.com/mussbenja-dotcom/BM-Dev-Commerce)
 
 > Resumen honesto: la **base técnica está completa y verificada** (modelo multi-tienda, seed con 5 tiendas demo, auth, motor de precios, checkout server-side, login). **Todavía no hay pantallas de tienda, panel ni superadmin.** Lo siguiente es construir el storefront (`src/app/s/[slug]`).
@@ -37,7 +37,7 @@
 
 ## Qué quedó parcialmente implementado
 
-- **Mercado Pago:** el servicio (`src/lib/services/payments/mercadopago.ts`) y el webhook (`src/app/api/webhooks/mercadopago/[storeId]/route.ts`) estaban diseñados, pero **no llegaron a escribirse en disco** porque falló el heredoc. Hay que crearlos de nuevo (ver P0 #4).
+- **Mercado Pago:** servicio y webhook implementados. Preferencias con total del servidor, metadata de tienda, URLs propias y selección SANDBOX/PRODUCTION. Webhook vuelve a consultar el pago con el token de la tienda y valida ID, tienda, moneda ARS, ambiente y monto. `applyPaymentResult` bloquea la fila del pedido para serializar notificaciones; evita duplicados y regresiones de PAID/REFUNDED, y registra pagos tardíos sin reabrir pedidos cancelados. Sin credenciales reales no se verificó un cobro en Mercado Pago. El simulador `/pago/[token]`, confirmación y conexión al checkout aún están pendientes: **el flujo de compra no está terminado**.
 - **Panel admin y superadmin:** dos agentes empezaron y se detuvieron por falta de tokens. Solo quedaron helpers sueltos:
   - `src/lib/services/admin/common.ts`, `src/lib/services/admin/types.ts`, `src/components/admin/labels.ts`
   - `src/lib/services/superadmin/constants.ts`, `src/lib/services/superadmin/queries.ts`
@@ -77,9 +77,9 @@
 
 ## Próximo paso exacto
 
-1. Recrear `src/lib/services/payments/mercadopago.ts` y el webhook (P0 #4); el diseño está arriba.
-2. Crear `src/app/s/[slug]/layout.tsx` y `src/app/s/[slug]/page.tsx` usando `getStoreBySlug`, `getHomeData`, `themeStyle`, `StoreProvider`, `CartProvider`. Probar en `http://localhost:3000/s/alma`.
-3. Seguir con catálogo → producto → drawer → checkout → API de pedidos → confirmación. Después admin.
+1. Crear `src/app/s/[slug]/layout.tsx` y `src/app/s/[slug]/page.tsx` usando `getStoreBySlug`, `getHomeData`, `themeStyle`, `StoreProvider`, `CartProvider`. Probar en `http://localhost:3000/s/alma`.
+2. Seguir con catálogo → producto → drawer → checkout → API de pedidos → confirmación y simulador demo. Conectar `startMercadoPagoPayment(storeId, orderId)` y proteger la simulación en el servidor. Después admin.
+3. Probar Mercado Pago con credenciales SANDBOX y webhook público HTTPS antes de declarar lista la integración real.
 
 ## Arquitectura actual
 
@@ -105,7 +105,7 @@
 
 | Integración | Estado |
 |---|---|
-| Mercado Pago | PENDIENTE (diseñado; hay que recrear el archivo) |
+| Mercado Pago | Servicio + webhook verificados localmente; faltan UI/checkout y prueba con credenciales reales |
 | WhatsApp (wa.me) | MOCK/listo en lógica (`src/lib/whatsapp.ts`), falta la UI |
 | Imágenes | FUNCIONANDO con URLs de Unsplash; subida PENDIENTE |
 | Email | PENDIENTE |
@@ -125,14 +125,27 @@
 - El rate limit es en memoria: sirve para una sola instancia.
 - `prisma dev` (PGlite) es solo para desarrollo; en producción usar Neon o el Postgres de Render.
 
-## Tests realizados
+## Tests realizados (hito de pagos, 2026-10-01)
 
 - `npx tsc --noEmit` → OK
 - `npx eslint src` → OK (0 errores)
 - `npm run db:seed` → OK (5 tiendas)
 - `GET /login` → 200
-- `npm run build` → no ejecutado todavía
-- Tests unitarios → no hay todavía
+- `npm run typecheck` y `npm run lint` → OK.
+- `npm test` → 24 pruebas OK (preferencias, aislamiento, validación, estados, errores, webhook).
+- `npm run test:integration` → 1 prueba contra PostgreSQL local OK: cinco aprobaciones concurrentes producen un pago/evento; aislamiento, monto incorrecto, reembolso y notificación vieja. Crea una tienda temporal propia y la elimina al terminar; no modifica el seed.
+- `npm run build` → OK. Primer intento restringido falló al descargar las cinco fuentes de Google Fonts ya presentes en `src/app/fonts.ts`; repetición con acceso de red pasó. No se ocultó ni se reemplazó por un build con fuentes simuladas.
+- HTTP manual en servidor de producción local `:3100`: webhook JSON inválido → 400, tipo ajeno → 200, ID inválido → 400, tienda sin credenciales → 404; `/login` → 200. El puerto 3000 ya estaba ocupado; no se detuvo ese proceso.
+- Prisma local necesitó permisos fuera del workspace para su directorio de datos; `npm run db:dev` pasó con escalación.
+- No se probaron cobros reales, webhooks desde Internet ni UI de tienda (todavía ausente).
+
+### Decisiones del hito de pagos
+
+- Precios de la base y Mercado Pago en pesos enteros (no centavos).
+- DEMO o token ausente solo permite simulación en tiendas `isDemo`; una tienda real sin configuración devuelve error para evitar pedidos ficticiamente pagados.
+- El webhook usa el cuerpo solo para extraer el ID, nunca para acreditar un pago. El estado se obtiene de la API autenticada. No hay secreto de firma de webhook configurado aún.
+- Reembolsos completos y contracargos se registran como REFUNDED; reembolsos parciales y conciliación administrativa quedan pendientes.
+- Documentación consultada: https://www.mercadopago.com.ar/developers/es/reference/online-payments/checkout-pro-preferences/create-preference/post
 
 ## Archivos importantes
 
