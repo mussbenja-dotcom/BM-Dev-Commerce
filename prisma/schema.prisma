@@ -188,6 +188,7 @@ model StoreSettings {
   shippingPolicy        String?
   returnsPolicy         String?
   privacyPolicy         String?
+  termsPolicy           String?
   updatedAt             DateTime        @updatedAt
   store                 Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
 }

@@ -195,14 +195,65 @@ test("demo panel visitors can save settings without touching seeded data", async
   await expect(page).toHaveURL(/\/admin$/);
   await page.goto("/admin/configuracion");
   const pay = page.getByRole("form", { name: "Medios de pago" });
+  await expect(page.getByText("MODO DEMO", { exact: true })).toBeVisible();
+  await expect(pay.getByLabel("Alias")).toBeDisabled();
   await pay.getByRole("button", { name: "Guardar medios de pago" }).click();
-  await expect(pay.getByRole("status")).toHaveText("Medios de pago guardados.");
+  await expect(pay.getByRole("status")).toHaveText("Medios de pago guardados. En modo demo los datos bancarios no se modifican.");
+});
+
+test("merchant duplicates, adjusts stock, publishes a banner and restyles the store", async ({ page }) => {
+  const [own] = storeIds;
+  const base = await db.product.create({
+    data: { storeId: own, slug: "buzo-extra", name: "Buzo Extra QA", description: "Buzo", sku: "BZX", price: 30000, active: true, variants: { create: { storeId: own, sku: "BZX", stock: 4 } } },
+  });
+  await login(page);
+  await page.goto(`/admin/productos/${base.id}`);
+  await page.getByRole("button", { name: "Duplicar" }).click();
+  await expect(page.getByText("Copia creada, oculta y con stock en 0.")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Buzo Extra QA (copia)" })).toBeVisible();
+
+  await page.getByRole("navigation", { name: "Panel" }).first().getByRole("link", { name: "Stock" }).click();
+  await page.getByRole("link", { name: "Agotado" }).click();
+  await expect(page.getByRole("link", { name: "Buzo Extra QA (copia)" })).toBeVisible();
+  await page.getByRole("link", { name: "Todo" }).click();
+  const stock = page.getByRole("form", { name: "Ajustar stock de Buzo Extra QA (copia) · Única" });
+  await stock.getByLabel("Cantidad").fill("6");
+  await stock.getByLabel("Motivo").fill("Ingreso de temporada");
+  await stock.getByRole("button", { name: "Ajustar" }).click();
+  await expect(stock.getByRole("status")).toHaveText("Stock actualizado: 0 → 6.");
+  await expect(page.getByText("Ingreso de temporada").first()).toBeVisible();
+
+  await page.goto("/admin/promociones#banners");
+  const banner = page.getByRole("form", { name: "Nuevo banner" });
+  await banner.getByLabel("Título").fill("Liquidación QA");
+  await banner.getByLabel("Imagen (URL)").fill("https://example.com/foto.jpg");
+  await banner.getByRole("button", { name: "Crear banner" }).click();
+  await expect(banner.getByText(/Cloudinary o Unsplash/).first()).toBeVisible();
+  await banner.getByLabel("Imagen (URL)").fill("https://images.unsplash.com/photo-1434389677669-e08b4cac3105");
+  await banner.getByRole("button", { name: "Crear banner" }).click();
+  await expect(banner.getByRole("status")).toHaveText("Banner creado.");
+
+  await page.goto("/admin/configuracion#apariencia");
+  const look = page.getByRole("form", { name: "Apariencia" });
+  await look.getByLabel("Texto", { exact: true }).fill("#f0f0f0");
+  await look.getByRole("button", { name: "Guardar apariencia" }).click();
+  await expect(look.getByText("El texto no se lee bien sobre ese fondo. Elegí colores con más contraste.").first()).toBeVisible();
+  await look.getByLabel("Texto", { exact: true }).fill("#202020");
+  await look.getByLabel("Principal (botones)", { exact: true }).fill("#7a2e22");
+  await look.getByRole("button", { name: "Guardar apariencia" }).click();
+  await expect(look.getByRole("status")).toHaveText("Apariencia guardada.");
+  expect(await db.storeTheme.findUniqueOrThrow({ where: { storeId: own } })).toMatchObject({ primaryColor: "#7a2e22", textColor: "#202020", primaryContrast: "#ffffff" });
+
+  await page.goto(`/s/${slug}`);
+  await expect(page.getByRole("heading", { name: "Liquidación QA" })).toBeVisible();
+  await page.goto(`/s/${slug}/politicas/terminos`);
+  await expect(page.getByRole("heading", { name: "Términos y condiciones" })).toBeVisible();
 });
 
 test("product screens fit a phone", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await login(page);
-  for (const path of ["/admin/productos", "/admin/productos/nuevo", "/admin/productos/categorias", "/admin/promociones", "/admin/clientes", "/admin/configuracion"]) {
+  for (const path of ["/admin/productos", "/admin/productos/nuevo", "/admin/productos/categorias", "/admin/promociones", "/admin/clientes", "/admin/configuracion", "/admin/stock", "/admin"]) {
     await page.goto(path);
     expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
   }

@@ -9,15 +9,15 @@ import { STOCK_REASON_LABEL, isLowStock, variantLabel } from "@/lib/services/adm
 import { formatPrice } from "@/lib/money";
 import { PageHeader, Panel } from "@/components/admin/order-badges";
 import { formatDateTime } from "@/components/admin/labels";
-import { EditVariantToggle, ProductActiveForm, ProductForm, StockForm, VariantForm } from "@/components/admin/product-forms";
+import { DuplicateProductForm, EditVariantToggle, ProductActiveForm, ProductForm, StockForm, VariantForm } from "@/components/admin/product-forms";
 import { Badge } from "@/components/ui/badge";
 
 export const metadata: Metadata = { title: "Producto" };
 
-export default async function ProductDetailPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ creado?: string }> }) {
+export default async function ProductDetailPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ creado?: string; copia?: string }> }) {
   const session = await requireStoreSession();
   const { id } = await params;
-  const { creado } = await searchParams;
+  const { creado, copia } = await searchParams;
   const product = await getAdminProduct(session.storeId, id.slice(0, 40));
   if (!product) notFound();
   const [categories, history, store] = await Promise.all([
@@ -38,9 +38,11 @@ export default async function ProductDetailPage({ params, searchParams }: { para
               Ver en la tienda <ExternalLink className="size-3.5" aria-hidden />
             </Link>
           ) : <Badge tone="neutral">Oculto en la tienda</Badge>}
+          <DuplicateProductForm productId={product.id} />
           <ProductActiveForm productId={product.id} active={product.active} />
         </div>
       </PageHeader>
+      {copia ? <p className="mb-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800" role="status">Copia creada, oculta y con stock en 0. Revisá nombre, SKU y fotos, cargá el stock y mostrala en la tienda.</p> : null}
       {creado ? <p className="mb-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800" role="status">Producto creado. Si tiene talles o colores, agregá sus variantes acá abajo.</p> : null}
 
       <div className="flex flex-col gap-6">

@@ -68,7 +68,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Se
                   </span>
                   <span className="shrink-0 text-right">
                     <span className="block text-sm font-medium tabular-nums">{formatPrice(c.totalSpent)}</span>
-                    <span className="block text-xs text-muted">{c.ordersCount} {c.ordersCount === 1 ? "pedido" : "pedidos"} · desde {formatDate(c.createdAt)}</span>
+                    <span className="block text-xs text-muted">{c.ordersCount} {c.ordersCount === 1 ? "pedido" : "pedidos"} · {c.orders[0] ? `último ${formatDate(c.orders[0].createdAt)}` : `desde ${formatDate(c.createdAt)}`}</span>
                   </span>
                 </Link>
               </li>

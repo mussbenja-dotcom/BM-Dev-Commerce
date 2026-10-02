@@ -273,3 +273,89 @@ export async function saveCategory(actor: Actor, categoryId: string | null, inpu
     throw err;
   }
 }
+
+// ---------------------------------------------------------------- duplicate
+
+async function freeSku(tx: Prisma.TransactionClient, storeId: string, base: string, taken: Set<string>) {
+  for (let i = 1; i < 100; i++) {
+    const sku = `${base.slice(0, 52)}-COPIA${i === 1 ? "" : i}`;
+    if (taken.has(sku)) continue;
+    const [p, v] = await Promise.all([
+      tx.product.findFirst({ where: { storeId, sku }, select: { id: true } }),
+      tx.productVariant.findFirst({ where: { storeId, sku }, select: { id: true } }),
+    ]);
+    if (!p && !v) { taken.add(sku); return sku; }
+  }
+  throw new AdminError("No pudimos generar un SKU libre para la copia.");
+}
+
+/**
+ * Copies a product with its images and variants as a hidden draft.
+ * Stock starts at 0: units are physical and must be loaded explicitly.
+ */
+export async function duplicateProduct(actor: Actor, productId: string) {
+  return db.$transaction(async (tx) => {
+    const source = await tx.product.findFirst({
+      where: { id: productId, storeId: actor.storeId },
+      include: { images: { orderBy: { position: "asc" } }, variants: { orderBy: { position: "asc" } } },
+    });
+    if (!source) throw new AdminError("No encontramos el producto.");
+    const taken = new Set<string>();
+    const name = `${source.name} (copia)`.slice(0, 120);
+    const slug = await uniqueSlug(tx, actor.storeId, { name, slug: null } as ProductInput);
+    const sku = await freeSku(tx, actor.storeId, source.sku, taken);
+    const copy = await tx.product.create({
+      data: {
+        storeId: actor.storeId, categoryId: source.categoryId, name, slug, sku, description: source.description, brand: source.brand,
+        price: source.price, compareAtPrice: source.compareAtPrice, option1Name: source.option1Name, option2Name: source.option2Name,
+        active: false, featured: false, isNew: source.isNew, seoTitle: source.seoTitle, seoDescription: source.seoDescription,
+      },
+      select: { id: true },
+    });
+    if (source.images.length) {
+      await tx.productImage.createMany({ data: source.images.map((img) => ({ storeId: actor.storeId, productId: copy.id, url: img.url, alt: name, position: img.position })) });
+    }
+    for (const v of source.variants) {
+      await tx.productVariant.create({
+        data: {
+          storeId: actor.storeId, productId: copy.id, sku: v.sku === source.sku ? sku : await freeSku(tx, actor.storeId, v.sku, taken),
+          option1: v.option1, option2: v.option2, colorHex: v.colorHex, price: v.price, lowStockAlert: v.lowStockAlert, active: v.active, position: v.position, stock: 0,
+        },
+      });
+    }
+    return copy;
+  });
+}
+
+// ---------------------------------------------------------------- stock screen
+
+export type StockFilter = "bajo" | "agotado" | undefined;
+
+export async function listStock(storeId: string, f: { q?: string; filter: StockFilter; page: number }) {
+  const where: Prisma.ProductVariantWhereInput = { storeId, product: { storeId } };
+  if (f.filter === "agotado") where.stock = 0;
+  if (f.filter === "bajo") where.stock = { lte: db.productVariant.fields.lowStockAlert };
+  const q = f.q?.trim();
+  if (q) where.OR = [{ sku: { contains: q, mode: "insensitive" } }, { product: { name: { contains: q, mode: "insensitive" } } }];
+  const [total, rows, totals] = await Promise.all([
+    db.productVariant.count({ where }),
+    db.productVariant.findMany({
+      where,
+      orderBy: [{ stock: "asc" }, { product: { name: "asc" } }],
+      skip: (f.page - 1) * PAGE_SIZE,
+      take: PAGE_SIZE,
+      select: { id: true, sku: true, option1: true, option2: true, stock: true, lowStockAlert: true, active: true, product: { select: { id: true, name: true, active: true } } },
+    }),
+    db.productVariant.aggregate({ where: { storeId, active: true, product: { active: true } }, _sum: { stock: true }, _count: true }),
+  ]);
+  return { total, rows, pages: Math.max(1, Math.ceil(total / PAGE_SIZE)), units: totals._sum.stock ?? 0, variants: totals._count };
+}
+
+export async function recentMovements(storeId: string, take = 25) {
+  return db.stockMovement.findMany({
+    where: { storeId },
+    orderBy: { createdAt: "desc" },
+    take,
+    select: { id: true, delta: true, stockAfter: true, reason: true, note: true, createdAt: true, variant: { select: { sku: true, option1: true, option2: true, product: { select: { id: true, name: true } } } } },
+  });
+}

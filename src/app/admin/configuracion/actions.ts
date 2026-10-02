@@ -6,7 +6,9 @@ import { audit } from "@/lib/audit";
 import { ok, revalidateStore, run, zf } from "@/lib/services/admin/common";
 import type { ActionResult, ActionState } from "@/lib/services/admin/types";
 import type { Actor } from "@/lib/services/admin/orders";
-import { saveShippingMethod, updateContact, updateFreeShipping, updatePayments, updatePolicies, updateStoreInfo } from "@/lib/services/admin/settings";
+import { saveShippingMethod, updateContact, updateFreeShipping, updatePayments, updatePolicies, updateStoreInfo, updateTheme } from "@/lib/services/admin/settings";
+import { HEX_COLOR } from "@/lib/color";
+import { FONT_OPTIONS, HOME_SECTIONS, TEMPLATE_KEYS, type FontKey } from "@/lib/templates";
 
 const str = (fd: FormData, key: string) => {
   const v = fd.get(key);
@@ -16,7 +18,7 @@ const read = (fd: FormData, keys: string[]) => Object.fromEntries(keys.map((k) =
 
 async function actor(): Promise<Actor> {
   const session = await requireStoreSession();
-  return { storeId: session.storeId, userId: session.userId };
+  return { storeId: session.storeId, userId: session.userId, isDemo: session.isDemo };
 }
 
 async function done(a: Actor, section: string, message: string, meta?: Record<string, unknown>): Promise<ActionResult> {
@@ -89,12 +91,12 @@ export async function savePaymentsAction(_prev: ActionState, fd: FormData): Prom
   return run(async () => {
     const raw = read(fd, Object.keys(paymentsSchema.shape));
     const input = paymentsSchema.parse({ ...raw, transferDiscountPct: raw.transferDiscountPct || "0", maxInstallments: raw.maxInstallments || "1" });
-    await updatePayments(a, input);
-    return done(a, "payments", "Medios de pago guardados.", { mercadoPago: input.enableMercadoPago, transfer: input.enableTransfer, cash: input.enableCash, whatsapp: input.enableWhatsappOrder });
+    const r = await updatePayments(a, input);
+    return done(a, "payments", r.bankLocked ? "Medios de pago guardados. En modo demo los datos bancarios no se modifican." : "Medios de pago guardados.", { mercadoPago: input.enableMercadoPago, transfer: input.enableTransfer, cash: input.enableCash, whatsapp: input.enableWhatsappOrder });
   });
 }
 
-const policiesSchema = z.object({ shippingPolicy: zf.optional(5000), returnsPolicy: zf.optional(5000), privacyPolicy: zf.optional(5000) });
+const policiesSchema = z.object({ shippingPolicy: zf.optional(5000), returnsPolicy: zf.optional(5000), privacyPolicy: zf.optional(5000), termsPolicy: zf.optional(10000) });
 
 export async function savePoliciesAction(_prev: ActionState, fd: FormData): Promise<ActionResult> {
   const a = await actor(); // outside run(): its redirect must not be caught
@@ -137,5 +139,38 @@ export async function saveShippingMethodAction(_prev: ActionState, fd: FormData)
     await audit({ action: methodId ? "shipping.update" : "shipping.create", storeId: a.storeId, userId: a.userId, entity: "shippingMethod", entityId: r.id });
     await revalidateStore(a.storeId, { storefront: true });
     return ok(methodId ? "Forma de entrega guardada." : "Forma de entrega creada.", { id: r.id });
+  });
+}
+
+const hex = (label: string) => z.string().trim().regex(HEX_COLOR, `Elegí un color válido para ${label}.`).transform((v) => v.toLowerCase());
+const fontKey = z.enum(Object.keys(FONT_OPTIONS) as [FontKey, ...FontKey[]], { message: "Elegí una tipografía." });
+
+const themeSchema = z.object({
+  template: z.string().refine((t) => TEMPLATE_KEYS.includes(t), "Elegí una plantilla."),
+  applyTemplate: zf.bool,
+  primaryColor: hex("el color principal"),
+  accentColor: hex("el acento"),
+  backgroundColor: hex("el fondo"),
+  textColor: hex("el texto"),
+  headingFont: fontKey,
+  bodyFont: fontKey,
+  radius: z.enum(["none", "sm", "md", "lg"]),
+  heroLayout: z.enum(["full", "split", "minimal"]),
+  cardStyle: z.enum(["portrait", "square"]),
+  headingCase: z.enum(["normal", "upper"]),
+  homeSections: z.array(z.enum(HOME_SECTIONS)).max(HOME_SECTIONS.length),
+});
+
+export async function saveThemeAction(_prev: ActionState, fd: FormData): Promise<ActionResult> {
+  const a = await actor(); // outside run(): its redirect must not be caught
+  return run(async () => {
+    // Sections come as checkboxes plus an order number each.
+    const sections = HOME_SECTIONS.filter((s) => fd.get(`section_${s}`) === "on")
+      .map((s) => ({ s, order: Number(fd.get(`order_${s}`) ?? 99) }))
+      .sort((x, y) => (Number.isFinite(x.order) ? x.order : 99) - (Number.isFinite(y.order) ? y.order : 99))
+      .map((x) => x.s);
+    const input = themeSchema.parse({ ...read(fd, ["template", "applyTemplate", "primaryColor", "accentColor", "backgroundColor", "textColor", "headingFont", "bodyFont", "radius", "heroLayout", "cardStyle", "headingCase"]), homeSections: sections });
+    await updateTheme(a, input);
+    return done(a, "theme", input.applyTemplate ? "Plantilla aplicada." : "Apariencia guardada.", { template: input.template, applyTemplate: input.applyTemplate });
   });
 }

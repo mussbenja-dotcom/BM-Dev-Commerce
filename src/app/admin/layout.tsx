@@ -65,9 +65,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             <span>Modo soporte BM Dev: los cambios que hagas impactan en esta tienda.</span>
             <button type="submit" className="font-medium underline">Salir del modo soporte</button>
           </form>
-        ) : store.isDemo ? (
+        ) : store.isDemo || session.isDemo ? (
           <p className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-center text-[13px] text-amber-900 lg:px-8" role="status">
-            Tienda de demostración: podés probar todas las funciones con datos de ejemplo.
+            <strong>MODO DEMO</strong> · Tienda de demostración: podés probar todas las funciones con datos de ejemplo.
           </p>
         ) : null}
         <main className="mx-auto w-full max-w-6xl px-4 py-6 lg:px-8 lg:py-8">{children}</main>

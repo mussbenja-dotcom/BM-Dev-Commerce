@@ -8,6 +8,7 @@ import type { ActionResult, ActionState } from "@/lib/services/admin/types";
 import type { Actor } from "@/lib/services/admin/orders";
 import { COUPON_CODE, normalizeCouponCode } from "@/lib/services/admin/coupon-rules";
 import { saveCoupon, setCouponActive } from "@/lib/services/admin/coupons";
+import { saveBanner } from "@/lib/services/admin/banners";
 
 const str = (fd: FormData, key: string) => {
   const v = fd.get(key);
@@ -62,5 +63,32 @@ export async function setCouponActiveAction(_prev: ActionState, fd: FormData): P
     await audit({ action: input.active ? "coupon.activate" : "coupon.pause", storeId: a.storeId, userId: a.userId, entity: "coupon", entityId: input.couponId });
     await revalidateStore(a.storeId);
     return ok(input.active ? "Cupón activado." : "Cupón pausado.");
+  });
+}
+
+const bannerSchema = z.object({
+  placement: z.enum(["hero", "promo"], { message: "Elegí dónde se muestra." }),
+  eyebrow: zf.optional(60),
+  title: zf.required(90, "Ingresá el título."),
+  subtitle: zf.optional(160),
+  ctaLabel: zf.optional(30),
+  ctaHref: zf.optional(200),
+  imageUrl: zf.optionalUrl().refine((v): v is string => v !== null, "Ingresá la imagen."),
+  mobileImageUrl: zf.optionalUrl(),
+  position: zf.int(0, 99, "Usá un número entre 0 y 99."),
+  active: zf.bool,
+});
+const BANNER_KEYS = Object.keys(bannerSchema.shape);
+
+export async function saveBannerAction(_prev: ActionState, fd: FormData): Promise<ActionResult> {
+  const a = await actor(); // outside run(): its redirect must not be caught
+  return run(async () => {
+    const bannerId = str(fd, "bannerId").slice(0, 40) || null;
+    const raw = Object.fromEntries(BANNER_KEYS.map((k) => [k, str(fd, k)]));
+    const input = bannerSchema.parse({ ...raw, position: raw.position || "0" });
+    const r = await saveBanner(a, bannerId, { ...input, imageUrl: input.imageUrl as string });
+    await audit({ action: bannerId ? "banner.update" : "banner.create", storeId: a.storeId, userId: a.userId, entity: "banner", entityId: r.id });
+    await revalidateStore(a.storeId, { storefront: true });
+    return ok(bannerId ? "Banner guardado." : "Banner creado.", { id: r.id });
   });
 }

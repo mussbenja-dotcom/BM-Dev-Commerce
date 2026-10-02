@@ -4,7 +4,9 @@ import { listCoupons } from "@/lib/services/admin/coupons";
 import { COUPON_STATE_LABEL, couponState, describeCoupon, type CouponState } from "@/lib/services/admin/coupon-rules";
 import { formatPrice } from "@/lib/money";
 import { PageHeader, Panel } from "@/components/admin/order-badges";
-import { CouponActiveForm, CouponForm } from "@/components/admin/coupon-forms";
+import { BannerForm, CouponActiveForm, CouponForm } from "@/components/admin/coupon-forms";
+import { listBanners } from "@/lib/services/admin/banners";
+import Link from "next/link";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
 
 export const metadata: Metadata = { title: "Promociones" };
@@ -16,11 +18,14 @@ const shortDate = (d: Date) => new Intl.DateTimeFormat("es-AR", { day: "2-digit"
 
 export default async function PromotionsPage() {
   const session = await requireStoreSession();
-  const coupons = await listCoupons(session.storeId);
+  const [coupons, banners] = await Promise.all([listCoupons(session.storeId), listBanners(session.storeId)]);
   const now = new Date();
   return (
     <div className="mx-auto max-w-4xl">
-      <PageHeader title="Promociones" description="Cupones de descuento o envío gratis que tus clientes aplican en el carrito." />
+      <PageHeader title="Promociones" description="Cupones para el carrito y banners para el inicio de tu tienda. Las ofertas y destacados se marcan en cada producto." />
+      <p className="mb-6 text-sm text-muted">
+        ¿Querés poner un producto en oferta? Cargale un <strong>precio anterior</strong> desde <Link href="/admin/productos" className="underline">Productos</Link>; para destacarlo, tildá <strong>Destacado</strong>.
+      </p>
       <Panel title="Nuevo cupón" className="mb-6">
         <div className="p-4 sm:p-5">
           <CouponForm coupon={{ code: "", description: "", type: "PERCENT", value: "", minSubtotal: "", maxUses: "", startsAt: "", endsAt: "", active: true, usedCount: 0 }} />
@@ -64,6 +69,30 @@ export default async function PromotionsPage() {
             })}
           </ul>
         ) : <p className="px-5 py-6 text-sm text-muted">Todavía no creaste cupones.</p>}
+      </Panel>
+
+      <h2 id="banners" className="mt-10 mb-3 text-lg font-semibold">Banners del inicio</h2>
+      <Panel title="Nuevo banner" className="mb-6">
+        <div className="p-4 sm:p-5"><BannerForm banner={{ placement: "promo", eyebrow: "", title: "", subtitle: "", ctaLabel: "", ctaHref: "/productos", imageUrl: "", mobileImageUrl: "", position: String(banners.length), active: true }} /></div>
+      </Panel>
+      <Panel title={`Tus banners (${banners.length})`}>
+        {banners.length ? (
+          <ul className="divide-y divide-line">
+            {banners.map((b) => (
+              <li key={b.id}>
+                <details className="px-4 py-3 sm:px-5">
+                  <summary className="flex cursor-pointer flex-wrap items-center justify-between gap-2 text-sm">
+                    <span><span className="font-medium">{b.title}</span><span className="block text-xs text-muted">{b.placement === "hero" ? "Portada" : "Promoción"} · orden {b.position}{b.ctaHref ? ` · ${b.ctaHref}` : ""}</span></span>
+                    <Badge tone={b.active ? "green" : "neutral"}>{b.active ? "Visible" : "Oculto"}</Badge>
+                  </summary>
+                  <div className="mt-4">
+                    <BannerForm banner={{ id: b.id, placement: b.placement === "hero" ? "hero" : "promo", eyebrow: b.eyebrow ?? "", title: b.title, subtitle: b.subtitle ?? "", ctaLabel: b.ctaLabel ?? "", ctaHref: b.ctaHref ?? "", imageUrl: b.imageUrl, mobileImageUrl: b.mobileImageUrl ?? "", position: String(b.position), active: b.active }} />
+                  </div>
+                </details>
+              </li>
+            ))}
+          </ul>
+        ) : <p className="px-5 py-6 text-sm text-muted">Todavía no tenés banners. La portada usa el nombre y la frase de tu tienda.</p>}
       </Panel>
     </div>
   );

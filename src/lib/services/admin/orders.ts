@@ -7,7 +7,7 @@ import { AdminError, PAGE_SIZE, dayKeyAR, startOfDayAR, startOfMonthAR } from ".
 import { canAdvance, canCancel, cancelNeedsRefundAck, manualPaymentTargets } from "./order-rules";
 
 /** Who performs a change. storeId always comes from the server session. */
-export type Actor = { storeId: string; userId: string };
+export type Actor = { storeId: string; userId: string; /** Demo sessions cannot change sensitive data (bank details, domain, secrets). */ isDemo?: boolean };
 
 const STATUS_LABEL: Record<OrderStatus, string> = {
   NEW: "Nuevo",
@@ -29,10 +29,10 @@ const PAYMENT_LABEL: Record<PaymentStatus, string> = {
 export async function getDashboard(storeId: string, now = new Date()) {
   const today = startOfDayAR(now);
   const month = startOfMonthAR(now);
-  const weekStart = new Date(today.getTime() - 6 * 24 * 60 * 60 * 1000);
+  const weekStart = new Date(today.getTime() - 29 * 24 * 60 * 60 * 1000); // last 30 days, today included
   const valid = { storeId, status: { not: "CANCELLED" as const } };
 
-  const [todayAgg, monthAgg, newCount, awaitingPayment, lowStock, recent, week] = await Promise.all([
+  const [todayAgg, monthAgg, newCount, awaitingPayment, lowStock, recent, week, top] = await Promise.all([
     db.order.aggregate({ where: { ...valid, createdAt: { gte: today } }, _sum: { total: true }, _count: true }),
     db.order.aggregate({ where: { ...valid, createdAt: { gte: month } }, _sum: { total: true }, _count: true }),
     db.order.count({ where: { storeId, status: "NEW" } }),
@@ -50,9 +50,16 @@ export async function getDashboard(storeId: string, now = new Date()) {
       select: orderRowSelect,
     }),
     db.order.findMany({ where: { ...valid, createdAt: { gte: weekStart } }, select: { createdAt: true, total: true } }),
+    db.orderItem.groupBy({
+      by: ["productId", "productName"],
+      where: { storeId, productId: { not: null }, order: { ...valid, createdAt: { gte: weekStart } } },
+      _sum: { quantity: true, lineTotal: true },
+      orderBy: { _sum: { quantity: "desc" } },
+      take: 5,
+    }),
   ]);
 
-  const days = Array.from({ length: 7 }, (_, i) => {
+  const days = Array.from({ length: 30 }, (_, i) => {
     const d = new Date(weekStart.getTime() + i * 24 * 60 * 60 * 1000);
     return { key: dayKeyAR(d), date: d, total: 0, count: 0 };
   });
@@ -72,6 +79,7 @@ export async function getDashboard(storeId: string, now = new Date()) {
     lowStock,
     recent,
     days,
+    topProducts: top.map((t) => ({ productId: t.productId!, name: t.productName, quantity: t._sum.quantity ?? 0, total: t._sum.lineTotal ?? 0 })),
   };
 }
 

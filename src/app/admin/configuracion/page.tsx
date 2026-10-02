@@ -4,17 +4,20 @@ import { getStoreSettings } from "@/lib/services/admin/settings";
 import { ARGENTINE_PROVINCES } from "@/lib/services/checkout";
 import { formatPrice } from "@/lib/money";
 import { PageHeader, Panel } from "@/components/admin/order-badges";
-import { ContactForm, FreeShippingForm, PaymentsForm, PoliciesForm, ShippingMethodForm, StoreInfoForm } from "@/components/admin/settings-forms";
+import { ContactForm, FreeShippingForm, PaymentsForm, PoliciesForm, ShippingMethodForm, StoreInfoForm, ThemeForm } from "@/components/admin/settings-forms";
+import { FONT_OPTIONS, HOME_SECTIONS, TEMPLATES } from "@/lib/templates";
+import { bmdevWhatsappUrl } from "@/lib/bmdev";
 import { Badge } from "@/components/ui/badge";
 import { Disclosure } from "@/components/admin/form-kit";
 
 export const metadata: Metadata = { title: "Configuración" };
 
-const SECTIONS = [["tienda", "Tienda"], ["contacto", "Contacto"], ["pagos", "Pagos"], ["envios", "Envíos"], ["politicas", "Políticas"]] as const;
+const SECTIONS = [["tienda", "Tienda"], ["apariencia", "Apariencia"], ["contacto", "Contacto"], ["pagos", "Pagos"], ["envios", "Envíos"], ["politicas", "Políticas"], ["dominio", "Dominio"]] as const;
 
 export default async function SettingsPage() {
   const session = await requireStoreSession();
-  const { store, settings: s, mercadoPago, shippingMethods } = await getStoreSettings(session.storeId);
+  const { store, settings: s, mercadoPago, shippingMethods, theme, domains } = await getStoreSettings(session.storeId);
+  const support = bmdevWhatsappUrl({ businessName: store.name });
   const v = (x: string | number | null | undefined) => (x === null || x === undefined ? "" : String(x));
 
   return (
@@ -33,6 +36,24 @@ export default async function SettingsPage() {
           </div></Panel>
         </section>
 
+        {theme ? (
+          <section id="apariencia" className="scroll-mt-28">
+            <Panel title="Apariencia"><div className="p-4 sm:p-5">
+              <ThemeForm
+                storeUrl={`/s/${store.slug}`}
+                templates={Object.values(TEMPLATES).map((t) => ({ key: t.key, label: t.label, description: t.description }))}
+                fonts={{ ...FONT_OPTIONS }}
+                sections={HOME_SECTIONS}
+                values={{
+                  template: theme.template, primaryColor: theme.primaryColor, accentColor: theme.accentColor, backgroundColor: theme.backgroundColor, textColor: theme.textColor,
+                  headingFont: theme.headingFont, bodyFont: theme.bodyFont, radius: theme.radius, heroLayout: theme.heroLayout, cardStyle: theme.cardStyle, headingCase: theme.headingCase,
+                  homeSections: Array.isArray(theme.homeSections) ? (theme.homeSections as string[]) : [],
+                }}
+              />
+            </div></Panel>
+          </section>
+        ) : null}
+
         <section id="contacto" className="scroll-mt-28">
           <Panel title="Contacto"><div className="p-4 sm:p-5">
             <ContactForm provinces={ARGENTINE_PROVINCES} values={{ whatsapp: v(s?.whatsapp), email: v(s?.email), phone: v(s?.phone), instagram: v(s?.instagram), facebook: v(s?.facebook), tiktok: v(s?.tiktok), address: v(s?.address), city: v(s?.city), province: v(s?.province), hours: v(s?.hours) }} />
@@ -43,6 +64,7 @@ export default async function SettingsPage() {
           <Panel title="Pagos" action={<Badge tone={mercadoPago.available ? "green" : "amber"}>{store.isDemo ? "Mercado Pago demo" : mercadoPago.available ? "Mercado Pago conectado" : "Mercado Pago sin conectar"}</Badge>}>
             <div className="p-4 sm:p-5">
               <PaymentsForm
+                bankLocked={session.isDemo}
                 mercadoPago={{ available: mercadoPago.available, demo: store.isDemo }}
                 flags={{ enableMercadoPago: s?.enableMercadoPago ?? false, enableTransfer: s?.enableTransfer ?? false, enableCash: s?.enableCash ?? false, enableWhatsappOrder: s?.enableWhatsappOrder ?? false }}
                 values={{ transferDiscountPct: v(s?.transferDiscountPct ?? 0), maxInstallments: v(s?.maxInstallments ?? 1), bankName: v(s?.bankName), bankHolder: v(s?.bankHolder), bankAlias: v(s?.bankAlias), bankCbu: v(s?.bankCbu), bankCuit: v(s?.bankCuit) }}
@@ -90,8 +112,28 @@ export default async function SettingsPage() {
 
         <section id="politicas" className="scroll-mt-28">
           <Panel title="Políticas"><div className="p-4 sm:p-5">
-            <PoliciesForm values={{ shippingPolicy: v(s?.shippingPolicy), returnsPolicy: v(s?.returnsPolicy), privacyPolicy: v(s?.privacyPolicy) }} />
+            <PoliciesForm values={{ shippingPolicy: v(s?.shippingPolicy), returnsPolicy: v(s?.returnsPolicy), privacyPolicy: v(s?.privacyPolicy), termsPolicy: v(s?.termsPolicy) }} />
           </div></Panel>
+        </section>
+
+        <section id="dominio" className="scroll-mt-28">
+          <Panel title="Dominio">
+            <div className="flex flex-col gap-3 p-4 text-sm sm:p-5">
+              {domains.length ? (
+                <ul className="flex flex-col gap-2">
+                  {domains.map((d) => (
+                    <li key={d.hostname} className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium">{d.hostname}</span>
+                      {d.isPrimary ? <Badge tone="blue">Principal</Badge> : null}
+                      <Badge tone={d.verified ? "green" : "amber"}>{d.verified ? "Conectado" : "Pendiente de conexión"}</Badge>
+                    </li>
+                  ))}
+                </ul>
+              ) : <p>Tu tienda se ve en <span className="font-medium">/s/{store.slug}</span>. Todavía no tiene dominio propio.</p>}
+              <p className="text-muted">El dominio lo conecta BM Dev para que funcione con seguridad (HTTPS). Para sumar o cambiar uno, escribinos.</p>
+              {support && !store.isDemo ? <a href={support} target="_blank" rel="noopener noreferrer" className="w-fit underline">Hablar con BM Dev por WhatsApp</a> : null}
+            </div>
+          </Panel>
         </section>
       </div>
     </div>

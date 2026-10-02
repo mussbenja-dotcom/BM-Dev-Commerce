@@ -8,7 +8,7 @@
 ## Próximo paso exacto
 
 1. **En tu máquina:** `git pull` en `main` y `npm run db:deploy` (migraciones `20261002020158_leads` y `*_lead_notes_store`). Opcional `npm run db:seed` (solo recrea tiendas demo; actualiza CBU/CUIT ficticios válidos y crea el superadmin si está en `.env`).
-2. **`/demo`:** selector de rubros con las 5 demos, "ver tienda" y "ver el panel" (login demo). La landing ya enlaza a `/s/<demo>`; falta la página dedicada.
+2. **`/demo`** (siguiente): selector de rubros con las 5 demos, "ver tienda" y "ver el panel" (login demo). La landing ya enlaza a `/s/<demo>`; falta la página dedicada.
 3. **SEO:** `sitemap.xml` y `robots.txt` (incluir `/tienda-online`; excluir `/admin`, `/superadmin`, `/login`, checkout/pedido), canonical y Open Graph por tienda, JSON-LD de producto.
 4. **Imágenes:** subida de archivos (Cloudinary o `/public/uploads`) para productos, logo y categorías; hoy son URLs.
 5. **Mercado Pago real:** carga de credenciales por tienda desde `/superadmin` (cifradas con `ENCRYPTION_KEY`) y prueba en SANDBOX con HTTPS antes de ofrecer cobros reales.
@@ -21,6 +21,19 @@
 - Las e2e/integración de esta sesión corrieron contra un PostgreSQL 16 local del contenedor (no PGlite), con `DATABASE_POOL_MAX=5`.
 
 ## Hitos implementados
+
+### Huecos P0.5 del panel `/admin` (esta sesión)
+
+- **Modo demo:** una sesión demo (`session.isDemo`) no puede cambiar datos bancarios: el servicio `updatePayments` conserva los guardados aunque el formulario mande otros, y la UI los muestra deshabilitados. Banner "MODO DEMO" en todo el panel. Dominio y credenciales de Mercado Pago no son editables por el comercio (solo BM Dev desde `/superadmin`). Todavía no hay subida de archivos.
+- **Dashboard:** gráfico SVG de 30 días (sin librerías) y "Más vendidos (30 días)" desde `OrderItem` excluyendo cancelados.
+- **Productos:** "Duplicar" crea una copia oculta, con SKUs `-COPIA` libres, mismas fotos/variantes y **stock 0**.
+- **Stock** (`/admin/stock`): todas las variantes, filtros stock bajo / agotado, búsqueda, ajuste en línea con motivo y últimos 25 movimientos de la tienda.
+- **Promociones:** banners de portada y de promoción (título, textos, botón con link **interno** de la tienda —se rechazan URLs externas y `//`—, imagen, orden, visible). Ofertas y destacados se marcan en el producto (precio anterior / destacado).
+- **Clientes:** fecha del último pedido.
+- **Configuración → Apariencia:** plantilla (opcional: aplicar sus colores y tipografías), colores con selector y vista previa, tipografías, mayúsculas, bordes, portada, fotos, y secciones del inicio con orden. Se valida contraste texto/fondo (WCAG ≥ 4.5) y que el color principal se distinga; el color del texto de los botones se calcula solo (`src/lib/color.ts`).
+- **Configuración → Dominio:** solo lectura (dominios, principal, conectado) + contacto con BM Dev.
+- **Políticas:** nueva "Términos y condiciones" (`StoreSettings.termsPolicy`, migración `*_terms_policy`), ruta `/s/[slug]/politicas/terminos`, link en el footer y texto por defecto al crear tiendas.
+- **Bug corregido:** el admin aceptaba cualquier URL `https://` de imagen, pero `next/image` solo renderiza los hosts configurados (una imagen de otro host rompía la página). Ahora `src/lib/image-hosts.ts` es la única lista, usada por `next.config.ts` y por la validación del admin (Unsplash, Cloudinary y `/uploads/`).
 
 ### Panel interno `/superadmin` (esta sesión)
 
@@ -144,6 +157,10 @@ Antes de publicar en otro entorno: `npm run db:deploy`.
 - `.env` local contiene `DATABASE_POOL_MAX=1` y `E2E_DATABASE_URL` de QA. No se commitean secretos.
 - `npm run db:seed` recrea solo tiendas `isDemo`; no ejecutarlo para probar cambios sobre datos que se quieran conservar.
 - Seed verificado en QA: Alma 23 productos / 149 variantes, Nativa 10 / 11, Mía 10 / 13, Nido 9 / 13, Detalle 8 / 8.
+
+## Verificaciones (hito huecos P0.5)
+
+- `npx tsc --noEmit` OK · `npx eslint src` OK · `npm test` 73 OK (+ color, image-hosts) · `npm run test:integration` 32 OK (+`admin-extras`: duplicar sin stock y aislado, stock/movimientos por tienda, banners con link interno y aislados, contraste/plantilla, dashboard 30 días; +demo no cambia datos bancarios) · `npm run build` OK · `npm run test:e2e` 18 de 18 OK.
 
 ## Verificaciones (hito superadmin)
 
