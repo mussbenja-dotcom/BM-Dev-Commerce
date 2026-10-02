@@ -1,0 +1,82 @@
+"use client";
+
+import { useState } from "react";
+import { Field, Input, Select } from "@/components/ui/field";
+import { saveCouponAction, setCouponActiveAction } from "@/app/admin/promociones/actions";
+import { AdminForm, Feedback, Submit } from "./form-kit";
+
+export type CouponValues = {
+  id?: string; code: string; description: string; type: "PERCENT" | "FIXED" | "FREE_SHIPPING"; value: string;
+  minSubtotal: string; maxUses: string; startsAt: string; endsAt: string; active: boolean; usedCount: number;
+};
+
+export function CouponForm({ coupon }: { coupon: CouponValues }) {
+  const isNew = !coupon.id;
+  const [type, setType] = useState(coupon.type);
+  return (
+    <AdminForm action={saveCouponAction} resetOnSuccess={isNew} className="grid gap-4 sm:grid-cols-2" label={isNew ? "Nuevo cupón" : `Editar cupón ${coupon.code}`}>
+      {(state, pending) => {
+        const e = state?.fieldErrors ?? {};
+        return (
+          <>
+            {coupon.id ? <input type="hidden" name="couponId" value={coupon.id} /> : null}
+            <Field label="Código" error={e.code} hint={coupon.usedCount > 0 ? "Ya se usó: el código no se puede cambiar." : "Lo que escribe tu cliente en el carrito."}>
+              {(p) => <Input {...p} name="code" required maxLength={30} defaultValue={coupon.code} readOnly={coupon.usedCount > 0} className="uppercase" placeholder="BIENVENIDA10" />}
+            </Field>
+            <Field label="Tipo de descuento" error={e.type}>
+              {(p) => (
+                <Select {...p} name="type" value={type} onChange={(ev) => setType(ev.target.value as CouponValues["type"])}>
+                  <option value="PERCENT">Porcentaje</option>
+                  <option value="FIXED">Monto fijo</option>
+                  <option value="FREE_SHIPPING">Envío gratis</option>
+                </Select>
+              )}
+            </Field>
+            {type !== "FREE_SHIPPING" ? (
+              <Field label={type === "PERCENT" ? "Porcentaje de descuento" : "Monto de descuento"} error={e.value} hint={type === "PERCENT" ? "Entre 1 y 100." : "En pesos."}>
+                {(p) => <Input {...p} name="value" inputMode="numeric" required defaultValue={coupon.value} />}
+              </Field>
+            ) : <input type="hidden" name="value" value="0" />}
+            <Field label="Compra mínima (opcional)" error={e.minSubtotal}>
+              {(p) => <Input {...p} name="minSubtotal" inputMode="numeric" defaultValue={coupon.minSubtotal} />}
+            </Field>
+            <Field label="Límite de usos (opcional)" error={e.maxUses} hint={coupon.usedCount ? `Usado ${coupon.usedCount} ${coupon.usedCount === 1 ? "vez" : "veces"}.` : undefined}>
+              {(p) => <Input {...p} name="maxUses" inputMode="numeric" defaultValue={coupon.maxUses} />}
+            </Field>
+            <Field label="Desde (opcional)" error={e.startsAt}>
+              {(p) => <Input {...p} name="startsAt" type="date" defaultValue={coupon.startsAt} />}
+            </Field>
+            <Field label="Hasta (opcional)" error={e.endsAt} hint="Vale hasta las 23:59 de ese día.">
+              {(p) => <Input {...p} name="endsAt" type="date" defaultValue={coupon.endsAt} />}
+            </Field>
+            <Field label="Descripción interna (opcional)" error={e.description} className="sm:col-span-2">
+              {(p) => <Input {...p} name="description" maxLength={120} defaultValue={coupon.description} placeholder="Ej.: campaña de Instagram" />}
+            </Field>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" name="active" defaultChecked={coupon.active} className="size-4 accent-current" /> Activo
+            </label>
+            <div className="flex items-center gap-3 sm:col-span-2">
+              <Submit pending={pending} size="sm" pendingLabel="Guardando…">{isNew ? "Crear cupón" : "Guardar cupón"}</Submit>
+              <Feedback state={state} />
+            </div>
+          </>
+        );
+      }}
+    </AdminForm>
+  );
+}
+
+export function CouponActiveForm({ couponId, active }: { couponId: string; active: boolean }) {
+  return (
+    <AdminForm action={setCouponActiveAction} className="flex items-center gap-2">
+      {(state, pending) => (
+        <>
+          <input type="hidden" name="couponId" value={couponId} />
+          <input type="hidden" name="active" value={String(!active)} />
+          <Submit pending={pending} size="sm" variant="secondary" pendingLabel="Guardando…">{active ? "Pausar" : "Activar"}</Submit>
+          <Feedback state={state} />
+        </>
+      )}
+    </AdminForm>
+  );
+}

@@ -7,7 +7,12 @@ export default defineConfig({
   testDir: "./tests/e2e",
   fullyParallel: false,
   workers: 1,
-  use: { baseURL: "http://localhost:3100", trace: "retain-on-failure" },
+  use: {
+    baseURL: "http://localhost:3100",
+    trace: "retain-on-failure",
+    // Optional: reuse a preinstalled Chromium (e.g. cloud sessions) instead of the pinned download.
+    launchOptions: process.env.PLAYWRIGHT_CHROMIUM_PATH ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH } : undefined,
+  },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
     command: "npm run start -- --port 3100",

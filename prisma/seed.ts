@@ -112,9 +112,9 @@ async function seedStore(s: SeedStore, demoPasswordHash: string) {
       enableCash: s.enableCash,
       bankName: "Banco Galicia",
       bankHolder: `${s.name} S.R.L.`,
-      bankCbu: "0070000000000000000000",
+      bankCbu: "0070999000000000000017", // fictitious, valid check digits
       bankAlias: `${s.slug.toUpperCase()}.TIENDA.DEMO`,
-      bankCuit: "30-00000000-0",
+      bankCuit: "30-00000000-7", // fictitious, valid check digit
       seoTitle: `${s.name} — ${s.tagline}`,
       seoDescription: s.description,
       footerText: s.description,

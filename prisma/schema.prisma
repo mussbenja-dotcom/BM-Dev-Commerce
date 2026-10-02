@@ -85,6 +85,15 @@ enum MercadoPagoMode {
   PRODUCTION
 }
 
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  WON
+  LOST
+  SPAM
+}
+
 model Store {
   id        String      @id @default(cuid())
   slug      String      @unique
@@ -560,4 +569,29 @@ model AuditLog {
 
   @@index([storeId, createdAt])
   @@index([userId])
+}
+
+// Requests from the BM Dev E-commerce landing (/tienda-online). Platform-level: no storeId.
+model Lead {
+  id              String     @id @default(cuid())
+  name            String
+  businessName    String
+  whatsapp        String
+  email           String
+  instagram       String?
+  industry        String
+  sellsOnline     String
+  productCount    String
+  needs           String
+  hasDomain       Boolean?
+  usesMercadoPago Boolean?
+  comment         String?
+  source          String     @default("tienda-online")
+  ip              String?
+  status          LeadStatus @default(NEW)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  @@index([status, createdAt])
+  @@index([createdAt])
 }
