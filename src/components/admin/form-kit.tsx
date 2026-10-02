@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useActionState, useEffect, useRef, type FormEvent, type ReactNode } from "react";
+import { startTransition, useActionState, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
 import { Button } from "@/components/ui/button";
 import type { ActionResult, ActionState } from "@/lib/services/admin/types";
@@ -63,5 +63,16 @@ export function AdminForm({
     <form ref={ref} action={formAction} onSubmit={onSubmit} className={className} aria-label={label} noValidate>
       {children(state, pending)}
     </form>
+  );
+}
+
+/** <details> whose open state belongs to the user, so a server re-render after saving does not collapse it. */
+export function Disclosure({ summary, initiallyOpen = false, className, children }: { summary: ReactNode; initiallyOpen?: boolean; className?: string; children: ReactNode }) {
+  const [open, setOpen] = useState(initiallyOpen);
+  return (
+    <details className={className} open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
+      {summary}
+      {children}
+    </details>
   );
 }

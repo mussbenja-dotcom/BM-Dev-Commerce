@@ -2,7 +2,7 @@
 
 - **Fecha:** 2026-10-02
 - **Branch:** `claude/wizardly-cerf-94tq6p` (sesión de Claude Code en la web; `main` sigue en `2bcbafe`). Mergear a `main` cuando se revise.
-- **Hitos de esta sesión:** fix e2e de filtros (`44772f2`) → landing comercial con leads → `/admin/productos` (productos, variantes, stock, categorías) → `/admin/promociones` (cupones) → `/admin/clientes`.
+- **Hitos de esta sesión:** fix e2e de filtros (`44772f2`) → landing comercial con leads → `/admin/productos` (productos, variantes, stock, categorías) → `/admin/promociones` (cupones) → `/admin/clientes` → `/admin/configuracion`. **El panel `/admin` quedó completo.**
 - **Push bloqueado:** la app de GitHub de Claude no tiene permiso de escritura en el repo (403 en `git push` y en la API). Los commits quedaron en el contenedor; se entregó un `git bundle` como respaldo. Ver "Cómo traer los commits" abajo.
 - **URL para revisar:** http://localhost:3000/ (landing) · http://localhost:3000/login → "Entrar al panel de la tienda demo" (Alma) → `/admin`.
 
@@ -11,7 +11,7 @@ La tienda pública compra de punta a punta, el comercio gestiona pedidos desde `
 ## Próximo paso exacto
 
 1. **Revisar en tu máquina** (ver "Verificar en local" abajo): aplicar la migración `20261002020158_leads` en la base demo y QA (`npm run db:deploy` con cada `DATABASE_URL`), mirar la landing con las fotos reales de las demos y confirmar el número de `BMDEV_WHATSAPP`.
-2. **Continuar `/admin`:** configuración (productos, promociones y clientes ya están). Agregar cada sección al array `ITEMS` de `src/components/admin/nav.tsx` solo cuando exista. Mismo patrón que pedidos: servicio en `src/lib/services/admin/*` filtrando por `storeId` de la sesión, reglas puras con tests, Server Actions con Zod + audit, integración con dos tiendas.
+2. **Panel `/admin`: completo** (inicio, pedidos, productos, promociones, clientes, configuración). Pendiente dentro del panel: subida de imágenes (hoy son URLs) y credenciales de Mercado Pago (las configura BM Dev; falta validar cobros reales en SANDBOX).
 3. **Leads en `/superadmin`:** listado con filtro por estado (`LeadStatus`), detalle y cambio de estado. El modelo ya existe.
 4. `/demo`, superadmin, SEO (sitemap/robots: incluir `/tienda-online`). Al cerrar cada hito: typecheck, lint, tests, build, e2e, actualizar este archivo, commit y push.
 
@@ -37,6 +37,14 @@ Para que futuras sesiones web puedan pushear: dar acceso de escritura a la app d
 - Causa: con el modal "Filtros" abierto, el formulario existía dos veces (sidebar oculto + modal) y los `<select>` estaban envueltos por su `<label>`, cuyo texto incluía todas las opciones ("OrdenarDestacadosMás nuevos…"). `getByLabel("Ordenar", { exact: true })` no encontraba nada.
 - `CatalogFilters` ahora renderiza el formulario en un solo lugar a la vez (el sidebar desmonta su copia mientras el modal está abierto) y Buscar/Ordenar/Categoría usan `htmlFor` + `id`.
 - `playwright.config.ts` acepta `PLAYWRIGHT_CHROMIUM_PATH` opcional para usar un Chromium preinstalado (entornos en la nube). Sin la variable no cambia nada.
+
+### Panel `/admin/configuracion` (esta sesión)
+
+- Nav: "Configuración". Secciones con su propio formulario: tienda (nombre, frase, descripción, anuncio, logo, ícono, pie, SEO), contacto (WhatsApp, email, redes, dirección, provincia de la lista, horarios), pagos, envíos y retiro, políticas. Todo revalida la tienda pública.
+- **Pagos:** activar/desactivar Mercado Pago, transferencia, efectivo y pedido por WhatsApp; descuento por transferencia (0–50 %), cuotas informativas, datos bancarios. Validación: al menos un medio que el cliente pueda usar; transferencia exige titular y alias o CBU; CBU/CVU y CUIT con dígitos verificadores (`settings-rules.ts`). El token de Mercado Pago nunca sale del servidor; el panel solo muestra si está conectado. **Decisión:** las credenciales de MP no se cargan desde el panel del comercio (las configura BM Dev hasta validar cobros reales).
+- **Envíos:** monto para envío gratis; formas de entrega (envío o retiro, costo, provincias de la lista —ninguna = todo el país—, demora, disponible, orden). Se desactivan, no se borran (los pedidos las referencian). El retiro ignora provincias.
+- **Seed:** el CBU y CUIT ficticios de las demos no pasaban los dígitos verificadores; se cambiaron por `0070999000000000000017` y `30-00000000-7`. Tus bases locales conservan los viejos hasta que corras `npm run db:seed` (solo recrea tiendas demo); mientras tanto, guardar "Pagos" en una demo pide corregir el CBU.
+- `Disclosure` en `form-kit.tsx`: `<details>` que no se cierra al re-renderizar después de guardar.
 
 ### Panel `/admin/clientes` (esta sesión)
 
@@ -134,6 +142,10 @@ Antes de publicar en otro entorno: `npm run db:deploy`.
 - `.env` local contiene `DATABASE_POOL_MAX=1` y `E2E_DATABASE_URL` de QA. No se commitean secretos.
 - `npm run db:seed` recrea solo tiendas `isDemo`; no ejecutarlo para probar cambios sobre datos que se quieran conservar.
 - Seed verificado en QA: Alma 23 productos / 149 variantes, Nativa 10 / 11, Mía 10 / 13, Nido 9 / 13, Detalle 8 / 8.
+
+## Verificaciones (hito configuración — último de la sesión)
+
+- typecheck, lint OK. `npm test` 66 OK (+8 `settings-rules`). `npm run test:integration` 23 OK (+3 `admin-settings`: token nunca expuesto, medio de pago usable, CBU inválido, aislamiento de datos y formas de entrega, retiro sin provincias, el checkout solo ve formas disponibles). `npm run test:e2e` 15 de 15 OK en dos corridas seguidas (+2: configurar anuncio/pagos/envío y verlo en la tienda; un visitante de la demo guarda Pagos sin tocar nada).
 
 ## Verificaciones (hito clientes)
 

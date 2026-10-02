@@ -147,10 +147,62 @@ test("merchant reviews customers and exports them", async ({ page }) => {
   expect((await page.goto(`/admin/clientes/${foreign.id}`))?.status()).toBe(404);
 });
 
+test("merchant configures the store and the storefront reflects it", async ({ page }) => {
+  await login(page);
+  await page.getByRole("navigation", { name: "Panel" }).first().getByRole("link", { name: "Configuración" }).click();
+  await expect(page.getByText("Mercado Pago sin conectar")).toBeVisible();
+
+  const info = page.getByRole("form", { name: "Datos de la tienda" });
+  await info.getByLabel("Barra de anuncio (opcional)").fill("Envío gratis QA desde $ 30.000");
+  await info.getByRole("button", { name: "Guardar datos" }).click();
+  await expect(info.getByRole("status")).toHaveText("Datos de la tienda guardados.");
+
+  const pay = page.getByRole("form", { name: "Medios de pago" });
+  for (const name of ["Mercado Pago", "Transferencia bancaria", "Efectivo al retirar", "Pedido por WhatsApp"]) await pay.getByLabel(name).uncheck();
+  await pay.getByLabel("Mercado Pago").check();
+  await pay.getByRole("button", { name: "Guardar medios de pago" }).click();
+  await expect(pay.getByText("Dejá activo al menos un medio de pago que tus clientes puedan usar.").first()).toBeVisible();
+  await pay.getByLabel("Transferencia bancaria").check();
+  await pay.getByLabel("Alias").fill("tienda.qa");
+  await pay.getByLabel("Titular").fill("Dueño QA");
+  await pay.getByLabel("CBU / CVU").fill("123");
+  await pay.getByRole("button", { name: "Guardar medios de pago" }).click();
+  await expect(pay.getByText("Revisá el CBU/CVU: son 22 números.").first()).toBeVisible();
+  await pay.getByLabel("CBU / CVU").fill("");
+  await pay.getByRole("button", { name: "Guardar medios de pago" }).click();
+  await expect(pay.getByRole("status")).toHaveText("Medios de pago guardados.");
+
+  const ship = page.getByRole("form", { name: "Nueva forma de entrega" });
+  await ship.getByLabel("Nombre").fill("Moto QA");
+  await ship.getByLabel("Costo").fill("2500");
+  await ship.getByLabel("CABA").check();
+  await ship.getByRole("button", { name: "Crear forma de entrega" }).click();
+  await expect(ship.getByRole("status")).toHaveText("Forma de entrega creada.");
+
+  const settings = await db.storeSettings.findUniqueOrThrow({ where: { storeId: storeIds[0] } });
+  expect(settings).toMatchObject({ enableMercadoPago: true, enableTransfer: true, enableCash: false, bankAlias: "tienda.qa", bankHolder: "Dueño QA" });
+  expect(await db.shippingMethod.findFirst({ where: { storeId: storeIds[0], name: "Moto QA" } })).toMatchObject({ price: 2500, provinces: ["CABA"] });
+  expect(await db.storeSettings.findUniqueOrThrow({ where: { storeId: storeIds[1] } })).toMatchObject({ announcement: null, bankAlias: null });
+
+  await page.goto(`/s/${slug}`);
+  await expect(page.getByText("Envío gratis QA desde $ 30.000")).toBeVisible();
+});
+
+test("demo panel visitors can save settings without touching seeded data", async ({ page }) => {
+  test.skip(process.env.DEMO_LOGIN_ENABLED !== "true", "demo login disabled");
+  await page.goto("/login");
+  await page.getByRole("button", { name: /tienda demo/ }).click();
+  await expect(page).toHaveURL(/\/admin$/);
+  await page.goto("/admin/configuracion");
+  const pay = page.getByRole("form", { name: "Medios de pago" });
+  await pay.getByRole("button", { name: "Guardar medios de pago" }).click();
+  await expect(pay.getByRole("status")).toHaveText("Medios de pago guardados.");
+});
+
 test("product screens fit a phone", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await login(page);
-  for (const path of ["/admin/productos", "/admin/productos/nuevo", "/admin/productos/categorias", "/admin/promociones", "/admin/clientes"]) {
+  for (const path of ["/admin/productos", "/admin/productos/nuevo", "/admin/productos/categorias", "/admin/promociones", "/admin/clientes", "/admin/configuracion"]) {
     await page.goto(path);
     expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
   }
