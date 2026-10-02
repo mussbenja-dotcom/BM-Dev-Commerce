@@ -2,7 +2,7 @@
 
 - **Fecha:** 2026-10-01
 - **Branch:** `main`
-- **Hitos:** `72976c0` Mercado Pago → `b43a07f` storefront y checkout (commit local, **sin push**) → panel `/admin` de pedidos (este handoff; commit `feat: add merchant order management panel`, sin push).
+- **Hitos:** `72976c0` Mercado Pago → `b43a07f` storefront y checkout → panel `/admin` de pedidos (este handoff; commit `b22a6e8`; ambos pusheados a `origin/main`).
 - **Sesión que escribió este archivo:** Claude Code, continuando el trabajo de ChatGPT. Se cortó por límite de tokens.
 - **URL para revisar:** http://localhost:3000/login → "Entrar al panel de la tienda demo" (Alma) → `/admin`.
 
@@ -18,7 +18,7 @@ La tienda pública compra de punta a punta y el comercio ya gestiona pedidos des
    - Sección demo con previews desktop / celular / panel (capturas reales de `/s/alma` y `/admin`) y links a las 5 demos. Revisar https://bmdev.solutions para identidad visual antes de diseñar.
    - Luego listar leads en `/superadmin`.
 3. Continuar `/admin`: productos/variantes/stock e historial, promociones (cupones), clientes, configuración. Agregar cada sección al array `ITEMS` de `src/components/admin/nav.tsx` solo cuando exista.
-4. `/demo`, superadmin, SEO. Al cerrar cada hito: typecheck, lint, tests, build, e2e, actualizar este archivo, commit (y push si el usuario lo autoriza: **los commits `b43a07f` y el del panel no están pusheados**).
+4. `/demo`, superadmin, SEO. Al cerrar cada hito: typecheck, lint, tests, build, e2e, actualizar este archivo, commit y push.
 
 ## Hitos implementados
 
